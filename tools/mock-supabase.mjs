@@ -2,17 +2,20 @@
 // Menerapkan endpoint yang dipakai server.js:
 //   POST /rest/v1/rpc/app_save_state
 //   GET  /rest/v1/app_state  (id=eq.1)
-//   GET  /rest/v1/auth_users (username=eq.X)
+//   GET  /rest/v1/auth_users (username=eq.X, role=eq.X)
+//   POST /rest/v1/auth_users (upsert akun siswa, Prefer: merge-duplicates)
+//   PATCH /rest/v1/auth_users (username=eq.X / role=eq.X)
+//   DELETE /rest/v1/auth_users (username=eq.X)
+//   GET  /rest/v1/auth_sessions (token=eq.X)
 //   POST /rest/v1/auth_sessions
-//   DELETE /rest/v1/auth_sessions (token=eq.X)
-//   PATCH /rest/v1/auth_users (role=eq.X)
+//   DELETE /rest/v1/auth_sessions (token=eq.X / username=eq.X)
 import http from 'node:http';
 
 // Data in-memory
 const appState = []; // {id:1, version, state}
 const authUsers = [
-  { id: 1, username: 'admin', password_hash: 'scrypt$iZ2rfwhTNVnAcXFfJWICOQ==$Z1nACicQwLt6mjRR9+VXUteVCqZWRER38iar9htFowTdvkkMZO8ZeFZgfRIOF+QtP+iduG+cipy5GFVtygT2Uw==', role: 'admin' },
-  { id: 2, username: 'guru',  password_hash: 'scrypt$nfTVeZdtyNb1OSmnJvv56w==$acAv8PVd9UOdinw3mmgTlZCuEKq1ah7q06cT2I+4q2UOVJ+ptB0pDdtu4vQJqHyM2SZDejqUz4xAKMQiTLgjLg==', role: 'guru' },
+  { id: 1, username: 'admin', password_hash: 'scrypt$iZ2rfwhTNVnAcXFfJWICOQ==$Z1nACicQwLt6mjRR9+VXUteVCqZWRER38iar9htFowTdvkkMZO8ZeFZgfRIOF+QtP+iduG+cipy5GFVtygT2Uw==', role: 'admin', nama: 'Admin', kelas: null, siswa_id: null, akses: 'sendiri' },
+  { id: 2, username: 'guru',  password_hash: 'scrypt$nfTVeZdtyNb1OSmnJvv56w==$acAv8PVd9UOdinw3mmgTlZCuEKq1ah7q06cT2I+4q2UOVJ+ptB0pDdtu4vQJqHyM2SZDejqUz4xAKMQiTLgjLg==', role: 'guru', nama: 'Guru', kelas: null, siswa_id: null, akses: 'sendiri' },
 ];
 const authSessions = [];
 let log = (s) => process.stdout.write('[mock] ' + s + '\n');
@@ -61,12 +64,50 @@ const server = http.createServer(async (req, res) => {
     if (path === '/rest/v1/auth_users' && req.method === 'GET') {
       let rows = authUsers;
       if (q.username) rows = rows.filter(u => u.username === q.username);
-      return send(200, rows.map(({ username, password_hash, role }) => ({ username, password_hash, role })));
+      if (q.role) rows = rows.filter(u => u.role === q.role);
+      return send(200, rows);
+    }
+    // INSERT / UPSERT auth_users
+    if (path === '/rest/v1/auth_users' && req.method === 'POST') {
+      const rows = Array.isArray(body) ? body : [body];
+      const merge = String(req.headers.prefer || '').includes('merge-duplicates');
+      for (const row of rows) {
+        const index = authUsers.findIndex(u => u.username === row.username);
+        if (index >= 0) {
+          if (!merge) {
+            return send(409, { message: 'duplicate key value violates unique constraint "auth_users_username_key"' });
+          }
+          authUsers[index] = { ...authUsers[index], ...row };
+        } else {
+          authUsers.push({ id: authUsers.length + 1, ...row });
+        }
+      }
+      return send(201, []);
+    }
+    // PATCH auth_users
+    if (path === '/rest/v1/auth_users' && req.method === 'PATCH') {
+      const targets = authUsers.filter(u =>
+        (!q.username || u.username === q.username) && (!q.role || u.role === q.role)
+      );
+      targets.forEach(row => Object.assign(row, body));
+      return send(200, []);
+    }
+    // DELETE auth_users
+    if (path === '/rest/v1/auth_users' && req.method === 'DELETE') {
+      for (let i = authUsers.length - 1; i >= 0; i--) {
+        const u = authUsers[i];
+        if ((q.username === undefined || u.username === q.username) &&
+            (q.role === undefined || u.role === q.role)) {
+          authUsers.splice(i, 1);
+        }
+      }
+      return send(200, []);
     }
     // SELECT auth_sessions
     if (path === '/rest/v1/auth_sessions' && req.method === 'GET') {
       let rows = authSessions;
       if (q.token) rows = rows.filter(s => s.token === q.token);
+      if (q.username) rows = rows.filter(s => s.username === q.username);
       return send(200, rows);
     }
     // INSERT auth_sessions
@@ -76,16 +117,13 @@ const server = http.createServer(async (req, res) => {
     }
     // DELETE auth_sessions
     if (path === '/rest/v1/auth_sessions' && req.method === 'DELETE') {
-      if (q.token) {
-        const i = authSessions.findIndex(s => s.token === q.token);
-        if (i >= 0) authSessions.splice(i, 1);
+      for (let i = authSessions.length - 1; i >= 0; i--) {
+        const s = authSessions[i];
+        if ((q.token === undefined || s.token === q.token) &&
+            (q.username === undefined || s.username === q.username)) {
+          authSessions.splice(i, 1);
+        }
       }
-      return send(200, []);
-    }
-    // UPDATE auth_users
-    if (path === '/rest/v1/auth_users' && req.method === 'PATCH') {
-      const row = authUsers.find(u => u.role === q.role);
-      if (row) Object.assign(row, body);
       return send(200, []);
     }
     return send(404, { message: `mock: path tidak dikenal ${path}` });
