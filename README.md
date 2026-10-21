@@ -24,7 +24,8 @@ Browser (index.html)  ──login & sinkron──▶  Vercel Serverless (api/ser
 |------|--------|
 | `index.html` | Aplikasi (sudah dikonfigurasi mode server via `window.SERVER_CONFIG`) |
 | `api/server.js` | Backend API (Vercel Serverless) — jembatan ke Supabase + filter akses siswa |
-| `supabase/schema.sql` | Skema tabel + fungsi + akun default (jalankan di Supabase) |
+| `supabase/schema.sql` | Skema tabel + fungsi + akun default (untuk instalasi baru) |
+| `supabase/migrate-akses-siswa.sql` | Migrasi khusus database yang **sudah ada** (menambah akses siswa) |
 | `vercel.json` | Konfigurasi static hosting |
 | `package.json` | Agar `api/server.js` dibaca sebagai ESM; `npm test` utk uji lokal |
 | `tools/` | Harness uji lokal (mock Supabase) — tidak perlu diubah |
@@ -36,12 +37,13 @@ Browser (index.html)  ──login & sinkron──▶  Vercel Serverless (api/ser
 1. Buat project di [supabase.com](https://supabase.com) (bebas / free tier cukup).
 2. Buka **SQL Editor** → **New query** → salin isi `supabase/schema.sql` → **Run**.
    Ini membuat tabel `app_state`, `auth_users`, `auth_sessions`, fungsi `app_save_state`,
-   dan 2 akun default. **Jika database sudah pernah dibuat**, jalankan ulang file yang
-   sama — skrip bersifat idempotent dan akan menambahkan kolom akses siswa
-   (`kelas`, `siswa_id`, `akses`) beserta role `siswa`.
+   dan 2 akun default.
+3. **Database yang sudah berjalan?** Cukup jalankan
+   `supabase/migrate-akses-siswa.sql` (lebih ringkas, hanya menambah akses siswa).
+   `schema.sql` juga aman dijalankan ulang karena bersifat idempotent.
    ⚠️ Tanpa langkah ini, pembuatan akun siswa akan gagal dengan pesan
    *"Skema database belum diperbarui"*.
-3. Buka **Project Settings → API**. Catat dua nilai:
+4. Buka **Project Settings → API**. Catat dua nilai:
    - `Project URL` (mis. `https://abcdefgh.supabase.co`)
    - **Secret key** — untuk project baru berbentuk `sb_secret_xxxxxxxx...`
      (setara service_role lama). ⚠️ **Rahasia — hanya untuk sisi server**, jangan bocor ke browser.
@@ -173,6 +175,13 @@ Uji UI (opsional, memakai jsdom — tidak dipakai saat runtime/deploy):
 npm install --no-save jsdom
 npm run test:ui          # mode lokal (?local)
 npm run test:ui-server   # mode server: login admin/siswa + filter state
+```
+
+Uji skema SQL terhadap Postgres sungguhan (PGlite — WASM, tanpa server DB):
+
+```bash
+npm install --no-save @electric-sql/pglite
+npm run test:schema      # instalasi baru, upgrade DB lama, idempotensi, constraint
 ```
 
 Pengujian mencakup: login admin/guru/siswa, pembatasan data per kelas untuk
