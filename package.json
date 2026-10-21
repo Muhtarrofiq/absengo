@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tools/test-api.mjs"
+    "test": "node tools/test-api.mjs",
+    "test:ui": "node tools/ui-smoke.mjs",
+    "test:ui-server": "node tools/ui-server-smoke.mjs",
+    "test:schema": "node tools/schema-check.mjs"
   }
 }

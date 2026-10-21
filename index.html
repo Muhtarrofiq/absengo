@@ -61,7 +61,7 @@
                 <span>Payroll Guru</span>
             </h1>
             <p class="text-blue-300 text-sm mt-1">Sistem Penggajian Honor</p>
-            <div class="mt-4 bg-blue-900/40 rounded-lg p-3 border border-blue-700 no-print">
+            <div id="boxTahunAjaranSidebar" class="mt-4 bg-blue-900/40 rounded-lg p-3 border border-blue-700 no-print">
                 <p class="text-blue-200 text-xs flex items-center gap-1 mb-1">
                     <i class="fas fa-calendar-alt"></i> Tahun Ajaran Aktif
                 </p>
@@ -113,6 +113,11 @@
                 </li>
                 <li class="pt-2">
                     <p class="text-blue-400 text-xs uppercase px-4 py-1">Absensi Siswa</p>
+                </li>
+                <li>
+                    <button onclick="showPage('absensi-saya')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white hover:bg-blue-700 transition" data-page="absensi-saya">
+                        <i class="fas fa-user-check w-5"></i> Absensi Saya
+                    </button>
                 </li>
                 <li>
                     <button onclick="showPage('data-siswa')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white hover:bg-blue-700 transition" data-page="data-siswa">
@@ -760,6 +765,137 @@
 
         </div>
 
+        <!-- Absensi Saya Page (khusus akun siswa) -->
+        <div id="page-absensi-saya" class="page hidden">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800">Absensi Saya</h2>
+                    <p class="text-gray-600">Rekap kehadiran dan catatan tata tertib sesuai akun Anda</p>
+                </div>
+                <button onclick="cetakAbsensiSaya()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg flex items-center gap-2 transition">
+                    <i class="fas fa-print"></i> Cetak Rekap
+                </button>
+            </div>
+
+            <!-- Identitas siswa -->
+            <div class="bg-gradient-to-r from-cyan-600 to-blue-700 text-white rounded-xl shadow p-5 mb-6">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center shrink-0"><i class="fas fa-user-graduate text-2xl"></i></div>
+                        <div>
+                            <p class="text-cyan-100 text-xs uppercase">Siswa</p>
+                            <h3 id="absensiSayaNama" class="text-xl font-bold">-</h3>
+                            <p class="text-cyan-100 text-sm"><span id="absensiSayaNisn">-</span> &bull; Kelas <span id="absensiSayaKelas" class="font-semibold">-</span></p>
+                        </div>
+                    </div>
+                    <div class="text-left sm:text-right">
+                        <p class="text-xs text-cyan-100">Tahun Ajaran</p>
+                        <p id="absensiSayaTA" class="font-semibold">-</p>
+                        <span id="absensiSayaCakupan" class="inline-block mt-1 px-2 py-0.5 rounded text-[10px] bg-white/20">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter periode -->
+            <div class="bg-white rounded-xl shadow p-4 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bulan</label>
+                    <select id="absensiSayaBulan" onchange="renderAbsensiSaya()" class="w-full px-4 py-2 border rounded-lg">
+                        <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+                        <option value="5">Mei</option><option value="6">Juni</option><option value="7">Juli</option><option value="8">Agustus</option>
+                        <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tahun</label>
+                    <select id="absensiSayaTahun" onchange="renderAbsensiSaya()" class="w-full px-4 py-2 border rounded-lg"></select>
+                </div>
+                <p class="text-xs text-gray-500 pb-2"><i class="fas fa-lock mr-1"></i> Data yang tampil dibatasi sesuai kelas dan hak akses akun Anda.</p>
+            </div>
+
+            <!-- Statistik -->
+            <div id="statAbsensiSaya" class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6"></div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <!-- Riwayat absensi -->
+                <div class="bg-white rounded-xl shadow overflow-hidden">
+                    <div class="p-4 bg-gradient-to-r from-green-600 to-emerald-700 text-white">
+                        <h3 class="font-semibold text-lg"><i class="fas fa-calendar-check mr-2"></i>Riwayat Absensi Saya</h3>
+                        <p class="text-green-100 text-sm">Daftar absensi harian pada periode terpilih</p>
+                    </div>
+                    <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tanggal</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Hari</th>
+                                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Keterangan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelRiwayatAbsensiSaya" class="divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tata tertib -->
+                <div class="bg-white rounded-xl shadow overflow-hidden">
+                    <div class="p-4 bg-gradient-to-r from-rose-600 to-red-700 text-white flex items-start justify-between gap-3">
+                        <div>
+                            <h3 class="font-semibold text-lg"><i class="fas fa-gavel mr-2"></i>Tata Tertib Saya</h3>
+                            <p class="text-rose-100 text-sm">Catatan pelanggaran dan total skor</p>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <p class="text-[10px] text-rose-100 uppercase">Total Skor</p>
+                            <p id="totalSkorTataTertibSaya" class="text-2xl font-bold">0</p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tanggal</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Kategori</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pelanggaran</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sanksi</th>
+                                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Skor</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelTataTertibSaya" class="divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rekap kelas (hanya bila cakupan akun = satu kelas) -->
+            <div id="seksiRekapKelasSiswa" class="bg-white rounded-xl shadow overflow-hidden mt-6 hidden">
+                <div class="p-4 bg-gradient-to-r from-indigo-600 to-purple-700 text-white">
+                    <h3 class="font-semibold text-lg"><i class="fas fa-users mr-2"></i>Rekap Kelas</h3>
+                    <p class="text-indigo-100 text-sm">Ringkasan kehadiran seluruh siswa di kelas Anda pada periode terpilih</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No</th>
+                                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIS/NISN</th>
+                                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+                                <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Hadir</th>
+                                <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Sakit</th>
+                                <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Izin</th>
+                                <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Alpa</th>
+                                <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Total</th>
+                                <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelRekapKelasSiswa" class="divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- Input Absensi Siswa Page -->
         <div id="page-input-absensi-siswa" class="page hidden">
             <div class="mb-6">
@@ -1300,12 +1436,62 @@
                 <!-- Pengaturan Login -->
                 <div class="bg-white rounded-xl shadow p-6" data-admin-only>
                     <h3 class="font-semibold mb-2 flex items-center gap-2"><i class="fas fa-user-lock text-indigo-500"></i> Akun Login & Role</h3>
-                    <p class="text-xs text-gray-500 mb-4">Role Guru hanya dapat membuka Input Kehadiran Guru, Input Absensi Siswa, dan Laporan Absen.</p>
+                    <p class="text-xs text-gray-500 mb-4">Role Guru hanya dapat membuka Input Kehadiran Guru, Input Absensi Siswa, dan Laporan Absen. Role Siswa hanya dapat membuka menu Absensi Saya sesuai kelasnya.</p>
                     <div class="space-y-3">
                         <div class="grid grid-cols-2 gap-3"><div><label class="block text-xs font-medium text-gray-700 mb-1">Username Admin</label><input id="loginAdminUsername" class="w-full px-3 py-2 border rounded-lg text-sm"></div><div><label class="block text-xs font-medium text-gray-700 mb-1">Password Admin</label><input id="loginAdminPassword" type="password" class="w-full px-3 py-2 border rounded-lg text-sm"></div></div>
                         <div class="grid grid-cols-2 gap-3"><div><label class="block text-xs font-medium text-gray-700 mb-1">Username Guru</label><input id="loginGuruUsername" class="w-full px-3 py-2 border rounded-lg text-sm"></div><div><label class="block text-xs font-medium text-gray-700 mb-1">Password Guru</label><input id="loginGuruPassword" type="password" class="w-full px-3 py-2 border rounded-lg text-sm"></div></div>
                         <button onclick="simpanAkunLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-save"></i> Simpan Akun Login</button>
                     </div>
+                </div>
+
+                <!-- Akses Login Siswa per Kelas -->
+                <div class="bg-white rounded-xl shadow p-6 lg:col-span-2" data-admin-only>
+                    <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+                        <div>
+                            <h3 class="font-semibold flex items-center gap-2"><i class="fas fa-user-graduate text-cyan-600"></i> Akses Login Siswa per Kelas</h3>
+                            <p class="text-xs text-gray-500 mt-1">Siswa login memakai NIS/NISN. Akun siswa hanya dapat membuka menu <strong>Absensi Saya</strong>; data guru, honor, dan kelas lain tidak dikirim ke perangkat siswa.</p>
+                        </div>
+                        <span id="badgeJumlahAkunSiswa" class="px-3 py-1 rounded-full text-xs bg-cyan-100 text-cyan-800">0 akun</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end bg-cyan-50 border border-cyan-100 rounded-lg p-3 mb-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Kelas</label>
+                            <select id="siswaAksesKelas" class="w-full px-3 py-2 border rounded-lg text-sm"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Password Awal</label>
+                            <input id="siswaAksesPasswordDefault" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Kosongkan = NIS/NISN">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Cakupan Data</label>
+                            <select id="siswaAksesScope" class="w-full px-3 py-2 border rounded-lg text-sm">
+                                <option value="sendiri">Hanya dirinya sendiri</option>
+                                <option value="kelas">Seluruh kelas</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <button onclick="buatAkunSiswaKelas()" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-2 rounded-lg text-sm"><i class="fas fa-user-plus mr-1"></i> Buat Akun Kelas Ini</button>
+                            <button onclick="hapusAkunSiswaKelas()" class="w-full bg-white border border-red-200 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-xs"><i class="fas fa-user-minus mr-1"></i> Hapus Akun Kelas Ini</button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto border rounded-lg max-h-80 overflow-y-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">No</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Kelas</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Username (NIS/NISN)</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Cakupan</th>
+                                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelAkunSiswa" class="divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i> Password awal mengikuti NIS/NISN bila kolom password dikosongkan. Gunakan tombol <strong>Reset</strong> bila siswa lupa password.</p>
                 </div>
 
                 <!-- Aksi -->
@@ -2120,12 +2306,12 @@
             <div class="p-7 bg-gradient-to-r from-blue-600 to-indigo-700 text-white text-center">
                 <div class="w-14 h-14 mx-auto mb-3 rounded-full bg-white/20 flex items-center justify-center"><i class="fas fa-user-lock text-2xl"></i></div>
                 <h2 class="text-xl font-bold">Login Sistem Sekolah</h2>
-                <p class="text-blue-100 text-sm mt-1">Masuk sesuai peran pengguna</p>
+                <p class="text-blue-100 text-sm mt-1">Admin/Guru memakai username, siswa memakai NIS/NISN</p>
             </div>
             <form id="formLogin" class="p-6 space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                    <input id="loginUsername" type="text" required autocomplete="username" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Masukkan username">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Username / NIS-NISN</label>
+                    <input id="loginUsername" type="text" required autocomplete="username" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Username atau NIS/NISN siswa">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
@@ -2266,6 +2452,25 @@
         }
         let akunLogin = normalisasiAkunLogin(JSON.parse(localStorage.getItem('akunLogin_v1') || 'null'));
         if (!localStorage.getItem('akunLogin_v1')) localStorage.setItem('akunLogin_v1', JSON.stringify(akunLogin));
+
+        // ============ AKUN LOGIN SISWA (PER KELAS) ============
+        // Di mode server, akun siswa tersimpan di tabel auth_users (Supabase) dan
+        // dikelola lewat API auth/siswa-accounts. Di mode lokal (?local) akun
+        // disimpan di localStorage. Key ini SENGAJA tidak termasuk snapshot yang
+        // disinkronkan ke server agar kredensial tidak ikut tersebar.
+        function normalisasiAkunSiswaLogin(data) {
+            if (!Array.isArray(data)) return [];
+            return data.filter(item => item && item.username).map(item => ({
+                username: String(item.username),
+                password: String(item.password || item.username),
+                siswaId: String(item.siswaId || ''),
+                nama: String(item.nama || ''),
+                kelas: String(item.kelas || ''),
+                akses: item.akses === 'kelas' ? 'kelas' : 'sendiri'
+            }));
+        }
+        let akunSiswaLogin = normalisasiAkunSiswaLogin(JSON.parse(localStorage.getItem('akunSiswaLogin_v1') || 'null'));
+        let akunSiswaTampil = [];
         let penggunaAktif = null;
 
         // Mode server aktif hanya ketika aplikasi dilayani lewat server_mysql/public/index.php.
@@ -2344,12 +2549,24 @@
             }
         }
 
+        // Server mengirim profil siswa terbaru (mis. setelah pindah kelas).
+        function terapkanProfilSiswaServer(result) {
+            if (!result?.profile || penggunaAktif?.role !== 'siswa') return;
+            penggunaAktif = { ...penggunaAktif, ...result.profile };
+            localStorage.setItem('sesiLogin_v1', JSON.stringify(penggunaAktif));
+            const badge = document.getElementById('loginUserRole');
+            if (badge) {
+                badge.textContent = `SISWA${penggunaAktif.kelas ? ' • ' + penggunaAktif.kelas : ''}`;
+            }
+        }
+
         async function sinkronDariServer() {
             if (!SERVER_MODE || !serverToken) return;
             const result = await apiServer('state/get');
+            terapkanProfilSiswaServer(result);
             const lokal = ambilSnapshotAplikasi();
             if (!result.state) {
-                if (adaDataLokalUntukMigrasi(lokal)) {
+                if (adaDataLokalUntukMigrasi(lokal) && penggunaAktif?.role !== 'siswa') {
                     const simpan = await apiServer('state/save', 'PUT', { state: lokal, version: 0, force: true });
                     serverStateVersion = simpan.version;
                     localStorage.setItem('serverStateVersion_v1', String(serverStateVersion));
@@ -2362,8 +2579,15 @@
             terapkanSnapshotAplikasi(result.state);
         }
 
+        // Hanya admin/guru yang boleh menulis ke server. Akun siswa bersifat
+        // read-only total (server juga menolak state/save dengan 403).
+        function bolehMenulisServer() {
+            return !!penggunaAktif && penggunaAktif.role !== 'siswa';
+        }
+
         async function sinkronKeServer(force = false) {
             if (!SERVER_MODE || !serverToken || sedangMenerapkanStateServer) return;
+            if (!bolehMenulisServer()) return;
             if (sinkronServerBerjalan) {
                 sinkronServerPending = true;
                 return;
@@ -2393,6 +2617,7 @@
             if (!SERVER_MODE || !serverToken || sedangMenerapkanStateServer || sinkronServerBerjalan || sinkronServerPending) return;
             try {
                 const result = await apiServer('state/get');
+                terapkanProfilSiswaServer(result);
                 const versiServer = Number(result.version || 0);
                 if (result.state && versiServer > serverStateVersion) {
                     serverStateVersion = versiServer;
@@ -2414,6 +2639,7 @@
 
         function jadwalkanSinkronServer(delay = 300) {
             if (!SERVER_MODE || !serverToken || sedangMenerapkanStateServer) return;
+            if (!bolehMenulisServer()) return;
             clearTimeout(timerSinkronServer);
             timerSinkronServer = setTimeout(() => sinkronKeServer(), delay);
         }
@@ -2440,8 +2666,212 @@
         }
 
         function halamanDiizinkan(role, page) {
+            // Menu Absensi Saya hanya untuk akun siswa (bukan admin/guru).
+            if (page === 'absensi-saya') return role === 'siswa';
             if (role === 'admin') return true;
+            if (role === 'siswa') return false;
             return ['kehadiran', 'input-absensi-siswa', 'laporan-absensi-siswa', 'tata-tertib-siswa'].includes(page);
+        }
+
+        function labelPeran(role) {
+            return role === 'admin' ? 'Admin' : role === 'guru' ? 'Guru' : role === 'siswa' ? 'Siswa' : (role || '-');
+        }
+
+        function halamanAwal(role) {
+            if (role === 'siswa') return 'absensi-saya';
+            if (role === 'guru') return 'kehadiran';
+            return 'dashboard';
+        }
+
+        // ============ ABSENSI SAYA (TAMPILAN SISWA) ============
+        // Data siswa dibatasi oleh server (mode server) dan tetap difilter lagi
+        // di sini per siswaId agar mode lokal (?local) memiliki perilaku sama.
+        function getInfoSiswaAktif() {
+            if (!penggunaAktif || penggunaAktif.role !== 'siswa') return null;
+            const siswaId = String(penggunaAktif.siswaId || '');
+            const nisn = String(penggunaAktif.username || '');
+            const siswa = dataSiswa.find(item =>
+                (siswaId && String(item.id) === siswaId) ||
+                (!siswaId && nisn && String(item.nisn || '') === nisn)
+            );
+            return {
+                id: siswa ? String(siswa.id) : siswaId,
+                nisn: siswa?.nisn || nisn,
+                nama: siswa?.nama || penggunaAktif.nama || nisn,
+                kelas: siswa?.kelas || penggunaAktif.kelas || '',
+                akses: penggunaAktif.akses === 'kelas' ? 'kelas' : 'sendiri',
+                ditemukan: !!siswa
+            };
+        }
+
+        function getAbsensiSayaPeriode(info, bulan, tahun) {
+            const prefix = bulan && tahun ? `${tahun}-${String(bulan).padStart(2, '0')}-` : '';
+            const idSaya = String(info?.id || '');
+            if (!idSaya) return [];
+            return dataAbsensiSiswa
+                .filter(absen => String(absen.siswaId || '') === idSaya && (!prefix || String(absen.tanggal || '').startsWith(prefix)))
+                .sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')));
+        }
+
+        function getTataTertibSaya(info) {
+            const idSaya = String(info?.id || '');
+            const nisnSaya = String(info?.nisn || '');
+            return dataPelanggaranSiswa
+                .filter(item =>
+                    (idSaya && String(item.siswaId || '') === idSaya) ||
+                    (nisnSaya && String(item.nisn || '') === nisnSaya)
+                )
+                .sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')));
+        }
+
+        function renderAbsensiSaya() {
+            const info = getInfoSiswaAktif();
+            if (!info) return;
+            const now = new Date();
+            const bulanEl = document.getElementById('absensiSayaBulan');
+            const tahunEl = document.getElementById('absensiSayaTahun');
+            if (bulanEl && !bulanEl.dataset.initialized) {
+                bulanEl.value = now.getMonth() + 1;
+                bulanEl.dataset.initialized = '1';
+            }
+            if (tahunEl && !tahunEl.options.length) {
+                for (let tahun = now.getFullYear() - 2; tahun <= now.getFullYear() + 2; tahun++) {
+                    const option = document.createElement('option');
+                    option.value = tahun;
+                    option.textContent = tahun;
+                    if (tahun === now.getFullYear()) option.selected = true;
+                    tahunEl.appendChild(option);
+                }
+            }
+            const setTeks = (id, teks) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = teks;
+            };
+            setTeks('absensiSayaNama', info.nama || '-');
+            setTeks('absensiSayaNisn', info.nisn || '-');
+            setTeks('absensiSayaKelas', info.kelas || '-');
+            setTeks('absensiSayaTA', tahunAjaranAktif || '-');
+            setTeks('absensiSayaCakupan', info.akses === 'kelas' ? 'Akses: seluruh kelas' : 'Akses: data sendiri');
+
+            const bulan = parseInt(bulanEl?.value || 0);
+            const tahun = parseInt(tahunEl?.value || 0);
+            const absenSaya = getAbsensiSayaPeriode(info, bulan, tahun);
+            const rekap = { Hadir: 0, Sakit: 0, Izin: 0, Alpa: 0 };
+            absenSaya.forEach(absen => {
+                if (rekap[absen.status] !== undefined) rekap[absen.status]++;
+            });
+            const total = rekap.Hadir + rekap.Sakit + rekap.Izin + rekap.Alpa;
+            const persen = total > 0 ? (rekap.Hadir / total) * 100 : 0;
+
+            const stat = document.getElementById('statAbsensiSaya');
+            if (stat) {
+                const kartu = [
+                    { label: 'Hadir', nilai: rekap.Hadir, ikon: 'fa-check-circle', kelas: 'bg-green-50 border-green-200 text-green-700' },
+                    { label: 'Sakit', nilai: rekap.Sakit, ikon: 'fa-notes-medical', kelas: 'bg-yellow-50 border-yellow-200 text-yellow-700' },
+                    { label: 'Izin', nilai: rekap.Izin, ikon: 'fa-file-alt', kelas: 'bg-blue-50 border-blue-200 text-blue-700' },
+                    { label: 'Alpa', nilai: rekap.Alpa, ikon: 'fa-user-times', kelas: 'bg-red-50 border-red-200 text-red-700' },
+                    { label: 'Kehadiran', nilai: total > 0 ? formatPersentaseSiswa(persen) : '-', ikon: 'fa-percentage', kelas: 'bg-indigo-50 border-indigo-200 text-indigo-700' }
+                ];
+                stat.innerHTML = kartu.map(item => `
+                    <div class="rounded-xl border ${item.kelas} p-4 shadow-sm">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="min-w-0">
+                                <p class="text-[11px] uppercase font-semibold opacity-70">${item.label}</p>
+                                <p class="text-2xl font-bold truncate">${item.nilai}</p>
+                            </div>
+                            <i class="fas ${item.ikon} text-2xl opacity-60"></i>
+                        </div>
+                    </div>`).join('');
+            }
+
+            const tbody = document.getElementById('tabelRiwayatAbsensiSaya');
+            if (tbody) {
+                const warnaStatus = {
+                    Hadir: 'bg-green-100 text-green-800',
+                    Sakit: 'bg-yellow-100 text-yellow-800',
+                    Izin: 'bg-blue-100 text-blue-800',
+                    Alpa: 'bg-red-100 text-red-800'
+                };
+                if (!absenSaya.length) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">${info.ditemukan ? 'Belum ada data absensi pada periode ini.' : 'Data siswa tidak ditemukan pada tahun ajaran ini. Hubungi admin sekolah.'}</td></tr>`;
+                } else {
+                    tbody.innerHTML = absenSaya.map((absen, index) => `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-3 py-2">${index + 1}</td>
+                            <td class="px-3 py-2">${escapeHtml(formatTanggal(absen.tanggal))}</td>
+                            <td class="px-3 py-2">${escapeHtml(getNamaHariAbsensiSiswa(absen.tanggal) || '-')}</td>
+                            <td class="px-3 py-2 text-center"><span class="px-2 py-1 rounded-full text-xs ${warnaStatus[absen.status] || 'bg-gray-100 text-gray-700'}">${escapeHtml(absen.status || '-')}</span></td>
+                            <td class="px-3 py-2">${escapeHtml(absen.keterangan || '-')}</td>
+                        </tr>`).join('');
+                }
+            }
+
+            const tatibSaya = getTataTertibSaya(info);
+            const totalSkor = tatibSaya.reduce((jumlah, item) => jumlah + Math.max(0, Number(item.skor) || 0), 0);
+            setTeks('totalSkorTataTertibSaya', String(totalSkor));
+            const tbodyTatib = document.getElementById('tabelTataTertibSaya');
+            if (tbodyTatib) {
+                if (!tatibSaya.length) {
+                    tbodyTatib.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Tidak ada catatan pelanggaran. Pertahankan!</td></tr>';
+                } else {
+                    tbodyTatib.innerHTML = tatibSaya.map((item, index) => `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-3 py-2">${index + 1}</td>
+                            <td class="px-3 py-2">${escapeHtml(formatTanggal(item.tanggal))}</td>
+                            <td class="px-3 py-2"><span class="px-2 py-1 rounded-full text-xs ${getWarnaKategoriTataTertib(item.kategori)}">${escapeHtml(item.kategori || '-')}</span></td>
+                            <td class="px-3 py-2">${escapeHtml(item.pelanggaran || '-')}</td>
+                            <td class="px-3 py-2">${escapeHtml(item.sanksi || '-')}</td>
+                            <td class="px-3 py-2 text-center font-bold text-rose-700">${Math.max(0, Number(item.skor) || 0)}</td>
+                        </tr>`).join('');
+                }
+            }
+
+            const seksiKelas = document.getElementById('seksiRekapKelasSiswa');
+            const bisaLihatKelas = info.akses === 'kelas' && !!info.kelas;
+            if (seksiKelas) seksiKelas.classList.toggle('hidden', !bisaLihatKelas);
+            if (bisaLihatKelas) {
+                const tbodyKelas = document.getElementById('tabelRekapKelasSiswa');
+                const rekapKelas = bulan && tahun ? hitungRekapAbsensiSiswa(bulan, tahun, info.kelas) : [];
+                if (tbodyKelas) {
+                    tbodyKelas.innerHTML = rekapKelas.length ? rekapKelas.map((siswa, index) => `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-3 py-2">${index + 1}</td>
+                            <td class="px-3 py-2">${escapeHtml(siswa.nisn || '-')}</td>
+                            <td class="px-3 py-2 font-medium">${escapeHtml(siswa.nama || '-')}</td>
+                            <td class="px-3 py-2 text-center bg-green-50 text-green-700 font-semibold">${siswa.Hadir}</td>
+                            <td class="px-3 py-2 text-center bg-yellow-50 text-yellow-700 font-semibold">${siswa.Sakit}</td>
+                            <td class="px-3 py-2 text-center bg-blue-50 text-blue-700 font-semibold">${siswa.Izin}</td>
+                            <td class="px-3 py-2 text-center bg-red-50 text-red-700 font-semibold">${siswa.Alpa}</td>
+                            <td class="px-3 py-2 text-center font-semibold">${siswa.total}</td>
+                            <td class="px-3 py-2 text-center">${siswa.total > 0 ? formatPersentaseSiswa(siswa.prosentase) : '-'}</td>
+                        </tr>`).join('') : '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-500">Belum ada data kelas pada periode ini.</td></tr>';
+                }
+            }
+        }
+
+        function cetakAbsensiSaya() {
+            const info = getInfoSiswaAktif();
+            if (!info) { showToast('Hanya akun siswa yang dapat mencetak rekap ini.', 'error'); return; }
+            const bulan = parseInt(document.getElementById('absensiSayaBulan')?.value || 0);
+            const tahun = parseInt(document.getElementById('absensiSayaTahun')?.value || 0);
+            const absenSaya = getAbsensiSayaPeriode(info, bulan, tahun);
+            const tatibSaya = getTataTertibSaya(info);
+            const totalSkor = tatibSaya.reduce((jumlah, item) => jumlah + Math.max(0, Number(item.skor) || 0), 0);
+
+            const tabelAbsensi = `<table><thead><tr><th>No</th><th>Tanggal</th><th>Hari</th><th>Status</th><th>Keterangan</th></tr></thead><tbody>${
+                absenSaya.length ? absenSaya.map((absen, index) => `<tr><td class="center">${index + 1}</td><td>${escapeHtml(formatTanggal(absen.tanggal))}</td><td>${escapeHtml(getNamaHariAbsensiSiswa(absen.tanggal) || '-')}</td><td class="center">${escapeHtml(absen.status || '-')}</td><td>${escapeHtml(absen.keterangan || '-')}</td></tr>`).join('')
+                    : '<tr><td colspan="5" class="center">Belum ada data absensi.</td></tr>'
+            }</tbody></table>`;
+
+            const tabelTatib = `<h3 style="font-family:'Times New Roman',Times,serif;font-size:11pt;margin:16px 0 6px;">Catatan Tata Tertib (Total Skor: ${totalSkor})</h3>
+                <table><thead><tr><th>No</th><th>Tanggal</th><th>Kategori</th><th>Pelanggaran</th><th>Sanksi</th><th>Skor</th></tr></thead><tbody>${
+                tatibSaya.length ? tatibSaya.map((item, index) => `<tr><td class="center">${index + 1}</td><td>${escapeHtml(formatTanggal(item.tanggal))}</td><td>${escapeHtml(item.kategori || '-')}</td><td>${escapeHtml(item.pelanggaran || '-')}</td><td>${escapeHtml(item.sanksi || '-')}</td><td class="center">${Math.max(0, Number(item.skor) || 0)}</td></tr>`).join('')
+                    : '<tr><td colspan="6" class="center">Tidak ada catatan pelanggaran.</td></tr>'
+            }</tbody></table>`;
+
+            const subjudul = `Nama: ${escapeHtml(info.nama)} | NIS/NISN: ${escapeHtml(info.nisn)} | Kelas: ${escapeHtml(info.kelas || '-')} | Periode: ${namaBulan[bulan] || '-'} ${tahun || ''}`;
+            document.getElementById('printRekapArea').innerHTML = buatKopLaporanSiswa('LAPORAN ABSENSI & TATA TERTIB SISWA', subjudul, tabelAbsensi + tabelTatib, true);
+            window.print();
         }
 
         function loadAkunLoginForm() {
@@ -2480,16 +2910,219 @@
             }
         }
 
+        // ============ KELOLA AKUN SISWA (KHUSUS ADMIN) ============
+        const USERNAME_SISWA_POLA = /^[A-Za-z0-9._-]{3,60}$/;
+
+        function initPengaturanAkunSiswa() {
+            if (penggunaAktif?.role !== 'admin') return;
+            isiSelectKelasSiswa('siswaAksesKelas', 'Pilih kelas');
+            muatAkunSiswa();
+        }
+
+        async function muatAkunSiswa() {
+            if (penggunaAktif?.role !== 'admin') return;
+            if (SERVER_MODE) {
+                try {
+                    const hasil = await apiServer('auth/siswa-accounts');
+                    akunSiswaTampil = (hasil.accounts || []).map(item => ({ ...item }));
+                } catch (error) {
+                    akunSiswaTampil = [];
+                    showToast('Gagal memuat akun siswa: ' + error.message, 'error');
+                }
+            } else {
+                akunSiswaTampil = akunSiswaLogin.map(item => ({ ...item }));
+            }
+            renderTabelAkunSiswa();
+        }
+
+        function renderTabelAkunSiswa() {
+            const tbody = document.getElementById('tabelAkunSiswa');
+            if (!tbody) return;
+            const badge = document.getElementById('badgeJumlahAkunSiswa');
+            if (badge) badge.textContent = `${akunSiswaTampil.length} akun`;
+            if (!akunSiswaTampil.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Belum ada akun siswa. Pilih kelas lalu klik "Buat Akun Kelas Ini".</td></tr>';
+                return;
+            }
+            const urut = [...akunSiswaTampil].sort((a, b) =>
+                `${a.kelas || ''}${a.nama || ''}`.localeCompare(`${b.kelas || ''}${b.nama || ''}`, 'id')
+            );
+            tbody.innerHTML = urut.map((akun, index) => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-3 py-2">${index + 1}</td>
+                    <td class="px-3 py-2 font-medium">${escapeHtml(akun.nama || '-')}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-1 rounded-full text-xs bg-cyan-100 text-cyan-800">${escapeHtml(akun.kelas || '-')}</span></td>
+                    <td class="px-3 py-2">${escapeHtml(akun.username || '-')}</td>
+                    <td class="px-3 py-2">
+                        <select onchange="ubahAksesAkunSiswa('${escapeAttr(akun.username)}', this.value)" class="px-2 py-1 border rounded text-xs">
+                            <option value="sendiri" ${akun.akses !== 'kelas' ? 'selected' : ''}>Sendiri</option>
+                            <option value="kelas" ${akun.akses === 'kelas' ? 'selected' : ''}>Satu Kelas</option>
+                        </select>
+                    </td>
+                    <td class="px-3 py-2 text-center whitespace-nowrap">
+                        <button onclick="resetPasswordAkunSiswa('${escapeAttr(akun.username)}')" class="text-amber-600 hover:text-amber-800 mr-2" title="Reset password"><i class="fas fa-key"></i></button>
+                        <button onclick="hapusAkunSiswa('${escapeAttr(akun.username)}')" class="text-red-600 hover:text-red-800" title="Hapus akun"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        async function simpanAkunSiswaTampil() {
+            if (penggunaAktif?.role !== 'admin') return false;
+            const dipakai = new Set();
+            for (const akun of akunSiswaTampil) {
+                const username = String(akun.username || '').trim();
+                if (!USERNAME_SISWA_POLA.test(username)) {
+                    showToast(`Username "${username || '-'}" tidak valid (3-60 karakter: huruf, angka, titik, garis bawah, minus).`, 'error');
+                    return false;
+                }
+                if (dipakai.has(username.toLowerCase())) {
+                    showToast(`Username "${username}" duplikat.`, 'error');
+                    return false;
+                }
+                dipakai.add(username.toLowerCase());
+            }
+            if (SERVER_MODE) {
+                try {
+                    const daftar = akunSiswaTampil.map(akun => {
+                        const item = {
+                            username: String(akun.username || '').trim(),
+                            siswaId: akun.siswaId || '',
+                            nama: akun.nama || '',
+                            kelas: akun.kelas || '',
+                            akses: akun.akses === 'kelas' ? 'kelas' : 'sendiri'
+                        };
+                        if (akun.password) item.password = akun.password;
+                        return item;
+                    });
+                    const hasil = await apiServer('auth/siswa-accounts', 'POST', { accounts: daftar });
+                    akunSiswaTampil = (hasil.accounts || []).map(item => ({ ...item }));
+                    renderTabelAkunSiswa();
+                    showToast('Akun siswa berhasil disimpan!');
+                    return true;
+                } catch (error) {
+                    showToast('Gagal menyimpan akun siswa: ' + error.message, 'error');
+                    return false;
+                }
+            }
+            akunSiswaLogin = akunSiswaTampil.map(akun => ({
+                username: String(akun.username || '').trim(),
+                password: String(akun.password || akun.username),
+                siswaId: akun.siswaId || '',
+                nama: akun.nama || '',
+                kelas: akun.kelas || '',
+                akses: akun.akses === 'kelas' ? 'kelas' : 'sendiri'
+            }));
+            localStorage.setItem('akunSiswaLogin_v1', JSON.stringify(akunSiswaLogin));
+            renderTabelAkunSiswa();
+            showToast('Akun siswa berhasil disimpan!');
+            return true;
+        }
+
+        async function buatAkunSiswaKelas() {
+            if (penggunaAktif?.role !== 'admin') return;
+            const kelas = document.getElementById('siswaAksesKelas')?.value || '';
+            if (!kelas) { showToast('Pilih kelas terlebih dahulu!', 'error'); return; }
+            const daftarSiswa = getDataSiswaTersaring(kelas);
+            if (!daftarSiswa.length) { showToast(`Belum ada data siswa di kelas ${kelas}.`, 'error'); return; }
+            const akses = document.getElementById('siswaAksesScope')?.value === 'kelas' ? 'kelas' : 'sendiri';
+            const passwordDefault = (document.getElementById('siswaAksesPasswordDefault')?.value || '').trim();
+            let baru = 0, perbarui = 0, lewati = 0;
+            daftarSiswa.forEach(siswa => {
+                const nisn = String(siswa.nisn || '').trim();
+                if (!nisn) { lewati++; return; }
+                const akun = akunSiswaTampil.find(item =>
+                    (item.siswaId && String(item.siswaId) === String(siswa.id)) ||
+                    String(item.username || '') === nisn
+                );
+                if (akun) {
+                    akun.siswaId = String(siswa.id);
+                    akun.nama = siswa.nama || akun.nama || '';
+                    akun.kelas = siswa.kelas || kelas;
+                    akun.akses = akses;
+                    // Ikuti perubahan NIS/NISN selama tidak bentrok dengan akun lain.
+                    const bentrok = akunSiswaTampil.some(item => item !== akun && String(item.username || '') === nisn);
+                    if (!bentrok) akun.username = nisn;
+                    perbarui++;
+                } else {
+                    akunSiswaTampil.push({
+                        username: nisn,
+                        password: passwordDefault || nisn,
+                        siswaId: String(siswa.id),
+                        nama: siswa.nama || '',
+                        kelas: siswa.kelas || kelas,
+                        akses
+                    });
+                    baru++;
+                }
+            });
+            if (!baru && !perbarui) { showToast('Tidak ada NIS/NISN valid pada kelas ini.', 'error'); return; }
+            const tersimpan = await simpanAkunSiswaTampil();
+            if (tersimpan) {
+                const infoPassword = passwordDefault ? 'Password mengikuti kolom Password Awal.' : 'Password awal = NIS/NISN masing-masing siswa.';
+                showToast(`Akun kelas ${kelas}: ${baru} baru, ${perbarui} diperbarui. ${infoPassword}${lewati ? ` ${lewati} siswa tanpa NIS dilewati.` : ''}`);
+            }
+        }
+
+        async function hapusAkunSiswaKelas() {
+            if (penggunaAktif?.role !== 'admin') return;
+            const kelas = document.getElementById('siswaAksesKelas')?.value || '';
+            if (!kelas) { showToast('Pilih kelas terlebih dahulu!', 'error'); return; }
+            const idKelas = new Set(getDataSiswaTersaring(kelas).map(siswa => String(siswa.id)));
+            const jumlah = akunSiswaTampil.filter(akun =>
+                akun.kelas === kelas || (akun.siswaId && idKelas.has(String(akun.siswaId)))
+            ).length;
+            if (!jumlah) { showToast(`Tidak ada akun siswa untuk kelas ${kelas}.`, 'error'); return; }
+            if (!confirm(`Hapus ${jumlah} akun login siswa kelas ${kelas}? Siswa tidak akan bisa login lagi.`)) return;
+            akunSiswaTampil = akunSiswaTampil.filter(akun =>
+                !(akun.kelas === kelas || (akun.siswaId && idKelas.has(String(akun.siswaId))))
+            );
+            if (await simpanAkunSiswaTampil()) showToast(`Akun login kelas ${kelas} dihapus.`);
+        }
+
+        async function ubahAksesAkunSiswa(username, akses) {
+            const akun = akunSiswaTampil.find(item => String(item.username) === String(username));
+            if (!akun) return;
+            akun.akses = akses === 'kelas' ? 'kelas' : 'sendiri';
+            if (await simpanAkunSiswaTampil()) {
+                showToast(`Cakupan akses ${akun.username} diubah ke ${akun.akses === 'kelas' ? 'seluruh kelas' : 'data sendiri'}.`);
+            }
+        }
+
+        async function resetPasswordAkunSiswa(username) {
+            const akun = akunSiswaTampil.find(item => String(item.username) === String(username));
+            if (!akun) return;
+            const password = prompt(`Password baru untuk ${akun.nama || akun.username} (username: ${akun.username}):`, akun.username);
+            if (password === null) return;
+            if (!String(password).trim()) { showToast('Password tidak boleh kosong!', 'error'); return; }
+            akun.password = String(password).trim();
+            if (await simpanAkunSiswaTampil()) {
+                showToast(`Password ${akun.username} berhasil direset. Sesi login lama otomatis dicabut.`);
+            }
+        }
+
+        async function hapusAkunSiswa(username) {
+            const akun = akunSiswaTampil.find(item => String(item.username) === String(username));
+            if (!akun || !confirm(`Hapus akun login ${akun.nama || akun.username} (${akun.username})?`)) return;
+            akunSiswaTampil = akunSiswaTampil.filter(item => String(item.username) !== String(username));
+            if (await simpanAkunSiswaTampil()) showToast('Akun siswa berhasil dihapus.');
+        }
+
         function terapkanRoleLogin() {
             const role = penggunaAktif?.role;
             const panel = document.getElementById('loginUserPanel');
             if (!role) { if (panel) panel.classList.add('hidden'); return; }
             if (panel) {
                 panel.classList.remove('hidden');
-                document.getElementById('loginUserName').textContent = penggunaAktif.username;
-                document.getElementById('loginUserRole').textContent = role === 'admin' ? 'ADMIN' : 'GURU';
-                document.getElementById('loginUserRole').className = `inline-block mt-1 px-2 py-0.5 rounded text-[10px] ${role === 'admin' ? 'bg-purple-700' : 'bg-green-700'}`;
+                document.getElementById('loginUserName').textContent = penggunaAktif.nama || penggunaAktif.username;
+                const badge = document.getElementById('loginUserRole');
+                badge.textContent = role === 'siswa'
+                    ? `SISWA${penggunaAktif.kelas ? ' • ' + penggunaAktif.kelas : ''}`
+                    : (role === 'admin' ? 'ADMIN' : 'GURU');
+                badge.className = `inline-block mt-1 px-2 py-0.5 rounded text-[10px] ${role === 'admin' ? 'bg-purple-700' : role === 'guru' ? 'bg-green-700' : 'bg-cyan-700'}`;
             }
+            // Siswa tidak perlu (dan tidak boleh) mengganti tahun ajaran sendiri.
+            const boxTA = document.getElementById('boxTahunAjaranSidebar');
+            if (boxTA) boxTA.style.display = role === 'siswa' ? 'none' : '';
             document.querySelectorAll('.nav-btn[data-page]').forEach(button => {
                 const allowed = halamanDiizinkan(role, button.dataset.page);
                 const item = button.closest('li');
@@ -2499,7 +3132,7 @@
                 element.style.display = role === 'admin' ? '' : 'none';
             });
             if (!halamanDiizinkan(role, document.querySelector('.nav-btn.sidebar-active')?.dataset.page || '')) {
-                showPage(role === 'guru' ? 'kehadiran' : 'dashboard');
+                showPage(halamanAwal(role));
             }
         }
 
@@ -2508,7 +3141,7 @@
             try {
                 if (SERVER_MODE && serverToken) {
                     const result = await apiServer('auth/me');
-                    penggunaAktif = result.user;
+                    penggunaAktif = { ...result.user };
                     localStorage.setItem('sesiLogin_v1', JSON.stringify(penggunaAktif));
                     await sinkronDariServer();
                     overlay.classList.add('hidden');
@@ -2522,9 +3155,23 @@
                 localStorage.removeItem('sesiLogin_v1');
             }
             const sesi = JSON.parse(localStorage.getItem('sesiLogin_v1') || 'null');
-            const akunValid = !SERVER_MODE && sesi && akunLogin[sesi.role] && akunLogin[sesi.role].username === sesi.username;
+            let akunValid = false;
+            if (!SERVER_MODE && sesi) {
+                if (sesi.role === 'siswa') {
+                    const akunSiswa = akunSiswaLogin.find(item => item.username === sesi.username);
+                    if (akunSiswa) {
+                        penggunaAktif = {
+                            username: akunSiswa.username, role: 'siswa', siswaId: akunSiswa.siswaId,
+                            nama: akunSiswa.nama, kelas: akunSiswa.kelas, akses: akunSiswa.akses
+                        };
+                        akunValid = true;
+                    }
+                } else if (akunLogin[sesi.role] && akunLogin[sesi.role].username === sesi.username) {
+                    penggunaAktif = { username: sesi.username, role: sesi.role };
+                    akunValid = true;
+                }
+            }
             if (akunValid) {
-                penggunaAktif = { username: sesi.username, role: sesi.role };
                 overlay.classList.add('hidden');
                 terapkanRoleLogin();
             } else {
@@ -2537,12 +3184,24 @@
 
         async function logoutAplikasi() {
             try { if (SERVER_MODE && serverToken) await apiServer('auth/logout', 'POST'); } catch (error) { console.warn(error); }
+            // Set null lebih dulu agar pembersihan cache tidak memicu sinkron ke server.
+            penggunaAktif = null;
             localStorage.removeItem('sesiLogin_v1');
             localStorage.removeItem('serverToken_v1');
             serverToken = '';
             serverStateVersion = 0;
-            penggunaAktif = null;
+            if (SERVER_MODE) {
+                // Perangkat sekolah bisa dipakai bergantian: jangan tinggalkan
+                // snapshot data (guru/gaji/kelas lain) di localStorage.
+                const hapus = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && keyStateAplikasi(key)) hapus.push(key);
+                }
+                hapus.forEach(key => localStorage.removeItem(key));
+            }
             document.getElementById('loginOverlay').classList.remove('hidden');
+            document.getElementById('loginUsername').value = '';
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginError').classList.add('hidden');
             terapkanRoleLogin();
@@ -2560,20 +3219,29 @@
                     serverToken = result.token;
                     localStorage.setItem('serverToken_v1', serverToken);
                     akun = result.user;
-                    penggunaAktif = { username: akun.username, role: akun.role };
+                    penggunaAktif = { ...akun };
                     localStorage.setItem('sesiLogin_v1', JSON.stringify(penggunaAktif));
                     await sinkronDariServer();
                 } else {
                     akun = Object.values(akunLogin).find(item => item.username === username && item.password === password);
+                    if (!akun) {
+                        const akunSiswa = akunSiswaLogin.find(item => item.username === username && String(item.password) === password);
+                        if (akunSiswa) {
+                            akun = {
+                                username: akunSiswa.username, role: 'siswa', siswaId: akunSiswa.siswaId,
+                                nama: akunSiswa.nama, kelas: akunSiswa.kelas, akses: akunSiswa.akses
+                            };
+                        }
+                    }
                     if (!akun) throw new Error('Username atau password tidak sesuai.');
-                    penggunaAktif = { username: akun.username, role: akun.role };
+                    penggunaAktif = { ...akun };
                     localStorage.setItem('sesiLogin_v1', JSON.stringify(penggunaAktif));
                 }
                 document.getElementById('loginOverlay').classList.add('hidden');
                 error.classList.add('hidden');
                 terapkanRoleLogin();
-                showPage(akun.role === 'guru' ? 'kehadiran' : 'dashboard');
-                showToast(`Login berhasil sebagai ${akun.role === 'admin' ? 'Admin' : 'Guru'}.`);
+                showPage(halamanAwal(akun.role));
+                showToast(`Login berhasil sebagai ${labelPeran(akun.role)}${akun.role === 'siswa' && akun.kelas ? ` (${akun.kelas})` : ''}.`);
             } catch (err) {
                 error.textContent = err.message || 'Login gagal.';
                 error.classList.remove('hidden');
@@ -2703,6 +3371,11 @@
 
         // Handler saat user memilih tahun ajaran dari dropdown
         function switchTahunAjaranHandler(kodeTA) {
+            if (penggunaAktif?.role === 'siswa') {
+                showToast('Akun siswa tidak dapat mengganti tahun ajaran.', 'error');
+                renderSwitchTahunAjaran();
+                return;
+            }
             if (!kodeTA || kodeTA === tahunAjaranAktif) return;
             if (!tahunAjaranList.includes(kodeTA)) {
                 showToast('Tahun ajaran tidak valid!', 'error');
@@ -2752,6 +3425,7 @@
             try { renderTabelKehadiran(); } catch (e) { console.warn(e); }
             try { renderTabelHariLibur(); } catch (e) { console.warn(e); }
             try { initAbsensiSiswa(); } catch (e) { console.warn(e); }
+            try { renderAbsensiSaya(); } catch (e) { console.warn(e); }
             try { renderTabelTataTertib(); } catch (e) { console.warn(e); }
             try { renderRiwayat(); } catch (e) { console.warn(e); }
             try { updateDashboard(); } catch (e) { console.warn(e); }
@@ -3723,7 +4397,7 @@
         // Show Page
         function showPage(page) {
             if (penggunaAktif && !halamanDiizinkan(penggunaAktif.role, page)) {
-                showToast('Menu ini hanya dapat diakses oleh Admin.', 'error');
+                showToast('Menu ini tidak dapat diakses oleh akun Anda.', 'error');
                 return;
             }
             document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
@@ -3750,6 +4424,8 @@
             if (['data-siswa', 'input-absensi-siswa', 'laporan-absensi-siswa'].includes(page)) initAbsensiSiswa();
             if (page === 'tata-tertib-siswa') { renderTabelTataTertib(); renderTabelPelanggaranSiswa(); }
             if (page === 'tahun-ajaran') renderTabelTahunAjaran();
+            if (page === 'absensi-saya') renderAbsensiSaya();
+            if (page === 'pengaturan') initPengaturanAkunSiswa();
         }
 
         // Toast
