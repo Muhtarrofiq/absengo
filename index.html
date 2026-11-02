@@ -2330,6 +2330,45 @@
 
     <script>
         // Data Storage
+
+        // ============ GAYA "BAYANGAN" KEPALA KOLOM TABEL (SEMUA CETAKAN) ============
+        // Dipakai oleh: cetakRekapKehadiranGuru, cetakRekap, cetakLegerTahunan,
+        // cetakLegerKehadiranTahunan, cetakSlipGaji, dan buatKopLaporanSiswa
+        // (absensi saya, laporan absensi siswa, laporan tata tertib).
+        //
+        // Kenapa berlapis? box-shadow & background SERING DIBUANG saat mencetak:
+        // Chrome membuangnya bila opsi "Background graphics" tidak dicentang, dan
+        // Firefox membuangnya secara default. `print-color-adjust: exact` hanya
+        // MEMINTA, pengaturan pengguna tetap menang. Karena itu efek bayangan
+        // dibangun 3 lapis supaya tetap terlihat di kertas mana pun:
+        //   1. BORDER      -> selalu tercetak. Garis bawah tebal + garis atas tipis
+        //                     membuat kepala kolom terlihat "timbul" tanpa warna.
+        //   2. BACKGROUND  -> gradasi abu yang menggelap ke bawah (bila warna ikut tercetak).
+        //   3. BOX-SHADOW  -> bayangan halus untuk layar / printer berwarna.
+        function cssBayanganKepalaTabel(selector = 'th', opsi = {}) {
+            const {
+                tebal = 3,
+                gelap = '#5f5f5f',
+                terang = '#bdbdbd',
+                gradasi = '#f7f7f7 0%, #e9e9e9 60%, #dcdcdc 100%',
+                redup = false,
+            } = opsi;
+            const dalam = redup ? '0.22' : '0.45';
+            const jatuh = redup ? '0.12' : '0.2';
+            return `
+                    /* Bayangan kepala kolom tabel (3 lapis: border, background, box-shadow) */
+                    ${selector} {
+                        print-color-adjust: exact; -webkit-print-color-adjust: exact;
+                        background-image: linear-gradient(to bottom, ${gradasi});
+                        border-top: 1px solid ${terang};
+                        border-bottom: ${tebal}px solid ${gelap};
+                        box-shadow:
+                            inset 0 -0.3em 0.4em -0.28em rgba(0, 0, 0, ${dalam}),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                            0 2px 3px rgba(0, 0, 0, ${jatuh});
+                    }`;
+        }
+
         // ============ SISTEM TAHUN AJARAN (MULTI-YEAR) ============
         // Tahun ajaran disimpan dengan key prefix "ta_<kodeTA>__" agar data tiap tahun terpisah.
         // Contoh: ta_2025_2026__dataGuru, ta_2026_2027__dataGuru, dll.
@@ -5844,6 +5883,7 @@
                         overflow-wrap: anywhere; word-break: break-word; hyphens: auto;
                     }
                     table.data-kehadiran th { background: #e8e8e8; text-align: center; font-weight: bold; }
+                    ${cssBayanganKepalaTabel('table.data-kehadiran th')}
                     table.data-kehadiran td.center { text-align: center; }
                     table.data-kehadiran td.right { text-align: right; }
                     table.data-kehadiran td.alasan { text-align: left; font-size: 7pt; }
@@ -6038,6 +6078,7 @@
                     table.data { width: 100%; border-collapse: collapse; font-size: 9pt; margin-top: 10px; }
                     table.data th, table.data td { border: 1px solid #000; padding: 4px 6px; }
                     table.data thead th { background: #e8e8e8; text-align: center; font-weight: bold; }
+                    ${cssBayanganKepalaTabel('table.data thead th')}
                     table.data tbody td.center { text-align: center; }
                     table.data tbody td.right { text-align: right; }
                     table.data tbody td.kosong { text-align: center; color: #888; font-style: italic; }
@@ -6288,6 +6329,7 @@
                     table.leger { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 6.4pt; }
                     table.leger th, table.leger td { border: 1px solid #000; padding: 3px 2px; vertical-align: middle; }
                     table.leger th { background: #e8e8e8; text-align: center; font-weight: bold; }
+                    ${cssBayanganKepalaTabel('table.leger th', { tebal: 2 })}
                     table.leger td.no, table.leger td.center { text-align: center; }
                     table.leger td.nama { text-align: left; overflow-wrap: anywhere; }
                     table.leger td.nominal { text-align: right; white-space: nowrap; }
@@ -6496,6 +6538,7 @@
                     table.leger { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 6.4pt; }
                     table.leger th, table.leger td { border: 1px solid #000; padding: 3px 2px; vertical-align: middle; }
                     table.leger th { background: #e8e8e8; text-align: center; font-weight: bold; }
+                    ${cssBayanganKepalaTabel('table.leger th', { tebal: 2 })}
                     table.leger td.no, table.leger td.center { text-align: center; }
                     table.leger td.nama { text-align: left; overflow-wrap: anywhere; }
                     table.leger td.persen { text-align: center; white-space: nowrap; }
@@ -6782,6 +6825,7 @@
             text-align: left;
             border: 1px solid #ddd;
         }
+        ${cssBayanganKepalaTabel('.slip-detail-table th', { tebal: 2, gelap: '#9a9a9a', terang: '#e5e5e5', gradasi: '#fbfbfb 0%, #f3f4f6 60%, #e5e7eb 100%', redup: true })}
         
         .slip-detail-table td {
             padding: 2px 5px;
@@ -9728,6 +9772,7 @@
                 .kop h2 { margin:0; font-size:16pt; text-transform:uppercase; } .kop p { margin:2px 0; font-size:9pt; }
                 .judul { text-align:center; margin:10px 0; } .judul h1 { margin:0; font-size:13pt; text-decoration:underline; } .judul p { margin:3px 0; font-size:9pt; }
                 table { width:100%; border-collapse:collapse; font-size:${landscape ? '8.5pt' : '9pt'}; } th, td { border:1px solid #000; padding:4px 5px; } th { background:#e8e8e8; text-align:center; } td.center { text-align:center; } td.right { text-align:right; } tfoot td { font-weight:bold; background:#f0f0f0; }
+                ${cssBayanganKepalaTabel('th', { redup: true })}
                 .ttd { display:flex; justify-content:space-between; margin-top:30px; font-size:9pt; } .ttd>div { width:32%; text-align:center; } .nama-ttd { margin-top:55px; font-weight:bold; text-decoration:underline; }
             </style><div class="laporan-siswa"><div class="kop">${getKopSekolahSejajarHtml(68, pengaturan.nbm ? `<p>NBM. ${escapeHtml(pengaturan.nbm)}</p>` : '')}</div><div class="judul"><h1>${judul}</h1><p>${subjudul}</p><p>Tahun Ajaran: ${escapeHtml(tahunAjaranAktif || '-')}</p></div>${isiTabel}<div class="ttd"><div><p>Petugas Absensi,</p><p class="nama-ttd">........................</p></div><div><p>${tanggalCetak}</p><p>Kepala Sekolah</p><p class="nama-ttd">${escapeHtml(pengaturan.kepalaSekolah || '........................')}</p>${pengaturan.nipKepala ? `<p>${escapeHtml(pengaturan.nipKepala)}</p>` : ''}</div></div></div>`;
         }
