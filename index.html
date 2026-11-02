@@ -5798,14 +5798,23 @@
                 });
             });
 
-            // Lebar kolom keterangan dinamis: agak kecil biar muat di A4 portrait.
-            const lebarKolomKet = daftarKeteranganCetak.length > 0
-                ? Math.max(4, Math.min(8, Math.floor(36 / daftarKeteranganCetak.length)))
+            // ---- Lebar kolom: total DIJAMIN tepat 100% supaya tidak terpotong ----
+            // Dulu: 71,4% statis + (4x8%) keterangan + 10% alasan = 113,4% -> kolom
+            // paling kanan (Prosentase & Alasan Ijin) hilang saat dicetak.
+            // Sekarang: kolom keterangan dibagi dari sisa, dan Alasan Ijin menerima
+            // sisa persisnya sehingga jumlah seluruh kolom selalu 100%.
+            const lebarTotalStatis = 3.2 + 5.0 + 15.5 + 9.5 + 6.2 + 6.2 + 6.8 + 5.5 + 6 + 7.5; // 71,4% (termasuk kolom Kode)
+            const jumlahKolomKet = daftarKeteranganCetak.length;
+            const alasanMinimal = 8; // jatah minimal kolom "Alasan Ijin"
+            const bulat1 = nilai => Math.round(nilai * 10) / 10;
+            const lebarKolomKet = jumlahKolomKet > 0
+                ? Math.min(8, Math.max(1, Math.floor(((100 - lebarTotalStatis - alasanMinimal) / jumlahKolomKet) * 10) / 10))
                 : 0;
+            const lebarSisaAlasan = bulat1(100 - lebarTotalStatis - (lebarKolomKet * jumlahKolomKet));
+            // Kategori keterangan banyak -> otomatis landscape supaya tetap muat.
+            const orientasiCetak = jumlahKolomKet > 6 ? 'landscape' : 'portrait';
             const headerKolomKet = daftarKeteranganCetak
                 .map(kat => `<th style="width:${lebarKolomKet}%;">${escapeHtml(kat)}</th>`).join('');
-            const lebarTotalStatis = 3.2 + 5.0 + 15.5 + 9.5 + 6.2 + 6.2 + 6.8 + 5.5 + 6 + 7.5; // dengan kolom Kode
-            const lebarSisaAlasan = Math.max(10, 100 - lebarTotalStatis - (lebarKolomKet * daftarKeteranganCetak.length));
             const hariIni = new Date();
             const tanggalCetak = hariIni.getDate() + ' ' + namaBulan[hariIni.getMonth() + 1] + ' ' + hariIni.getFullYear();
             const tahunAjaranLabel = tahunAjaranAktif ? `Tahun Ajaran ${tahunAjaranAktif}` : '-';
@@ -5813,9 +5822,9 @@
 
             const printHTML = `
                 <style>
-                    @page { size: A4 portrait; margin: 0.8cm; }
+                    @page { size: A4 ${orientasiCetak}; margin: 0.8cm; }
                     body { font-family: 'Times New Roman', Times, serif; color: #000; background: #fff; margin: 0; padding: 0; }
-                    .kehadiran-print { width: 100%; max-width: 19.3cm; margin: 0 auto; }
+                    .kehadiran-print { width: 100%; max-width: none; margin: 0 auto; }
                     .kop-surat { text-align: center; border-bottom: 3px double #000; padding-bottom: 6px; margin-bottom: 8px; }
                     .kop-nama { font-size: 15pt; font-weight: bold; margin: 0; text-transform: uppercase; }
                     .kop-alamat { font-size: 8.5pt; margin: 2px 0 0; }
@@ -5825,13 +5834,24 @@
                     .judul p { font-size: 8.5pt; margin: 3px 0 0; }
                     .identitas { display: flex; justify-content: space-between; font-size: 8.5pt; margin: 6px 0; }
                     .identitas p { margin: 2px 0; }
-                    table.data-kehadiran { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 6px; }
-                    table.data-kehadiran th, table.data-kehadiran td { border: 1px solid #000; padding: 3px 4px; vertical-align: middle; }
+                    table.data-kehadiran {
+                        width: 100%; border-collapse: collapse; table-layout: fixed;
+                        font-size: 7.5pt; margin-top: 6px;
+                        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                    }
+                    table.data-kehadiran th, table.data-kehadiran td {
+                        border: 1px solid #000; padding: 2px 3px; vertical-align: middle;
+                        overflow-wrap: anywhere; word-break: break-word; hyphens: auto;
+                    }
                     table.data-kehadiran th { background: #e8e8e8; text-align: center; font-weight: bold; }
                     table.data-kehadiran td.center { text-align: center; }
                     table.data-kehadiran td.right { text-align: right; }
-                    table.data-kehadiran td.alasan { text-align: left; font-size: 7.5pt; }
+                    table.data-kehadiran td.alasan { text-align: left; font-size: 7pt; }
                     table.data-kehadiran tfoot td { background: #f0f0f0; font-weight: bold; }
+                    /* Header tabel diulang di setiap halaman & baris tidak terbelah */
+                    table.data-kehadiran thead { display: table-header-group; }
+                    table.data-kehadiran tfoot { display: table-row-group; }
+                    table.data-kehadiran tr { page-break-inside: avoid; break-inside: avoid; }
                     .ttd { display: flex; justify-content: space-between; margin-top: 24px; page-break-inside: avoid; font-size: 8.5pt; }
                     .ttd > div { width: 32%; text-align: center; }
                     .nama-ttd { margin-top: 48px; font-weight: bold; text-decoration: underline; }
@@ -5939,6 +5959,14 @@
 
             const printArea = document.getElementById('printRekapArea');
             printArea.innerHTML = printHTML;
+            // @page (portrait/landscape) ikut ter-inject, jadi area cetak dibersihkan
+            // lagi setelah dialog cetak ditutup supaya orientasi tidak "nyangkut"
+            // ke pencetakan dokumen lain berikutnya.
+            const bersihkanPrintArea = () => {
+                printArea.innerHTML = '';
+                window.removeEventListener('afterprint', bersihkanPrintArea);
+            };
+            window.addEventListener('afterprint', bersihkanPrintArea);
             window.print();
         }
 
