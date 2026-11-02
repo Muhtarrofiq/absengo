@@ -188,8 +188,38 @@ Uji tata letak cetak (jsdom):
 
 ```bash
 npm install --no-save jsdom
-npm run test:print       # Cetak Kehadiran Guru: lebar kolom & orientasi kertas
+npm run test:print         # Cetak Kehadiran Guru: lebar kolom & orientasi kertas
+npm run test:print-shadow  # bayangan kepala kolom tabel di SEMUA tampilan cetak
 ```
+
+Pratinjau visual semua dokumen cetak (tanpa perlu data produksi):
+
+```bash
+npm run print:preview      # -> /home/user/print-preview.html
+```
+
+### Bayangan kepala kolom tabel
+
+Semua tampilan cetak memakai satu pembangun CSS bersama, `cssBayanganKepalaTabel()`
+(di dalam `index.html`), supaya gaya kepala tabel konsisten:
+
+| Tampilan cetak | Selector |
+|---|---|
+| Kehadiran Guru | `table.data-kehadiran th` |
+| Rekap Gaji | `table.data thead th` |
+| Leger Tahunan & Leger Kehadiran Tahunan | `table.leger th` |
+| Slip Gaji | `.slip-detail-table th` |
+| Laporan Siswa, Tata Tertib, Absensi Saya | `th` (di `buatKopLaporanSiswa`) |
+
+Efeknya dibangun **3 lapis** karena `box-shadow` dan `background` sering dibuang
+saat mencetak (Chrome: opsi "Background graphics" tidak dicentang; Firefox:
+dibuang default). `print-color-adjust: exact` hanya meminta, pengaturan pengguna
+tetap menang. Jadi:
+
+1. **Border** — garis bawah tebal + garis atas tipis. Selalu tercetak, inilah
+   lapisan yang membuat kepala kolom tetap terlihat timbul di printer hitam-putih.
+2. **Background** — gradasi abu yang menggelap ke bawah, bila warna ikut tercetak.
+3. **Box-shadow** — bayangan halus untuk layar dan printer berwarna.
 
 Pengujian mencakup: login admin/guru/siswa, pembatasan data per kelas untuk
 cakupan `sendiri` dan `kelas`, penolakan `state/save` oleh siswa, validasi
