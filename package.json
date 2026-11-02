@@ -8,6 +8,7 @@
     "test:ui": "node tools/ui-smoke.mjs",
     "test:ui-server": "node tools/ui-server-smoke.mjs",
     "test:schema": "node tools/schema-check.mjs",
-    "test:print": "node tools/print-kehadiran-check.mjs"
+    "test:print": "node tools/print-kehadiran-check.mjs",
+    "print:preview": "node tools/print-preview-kehadiran.mjs"
   }
 }
