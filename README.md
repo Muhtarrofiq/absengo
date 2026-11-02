@@ -184,6 +184,16 @@ npm install --no-save @electric-sql/pglite
 npm run test:schema      # instalasi baru, upgrade DB lama, idempotensi, constraint
 ```
 
+Uji tata letak cetak (jsdom):
+
+```bash
+npm install --no-save jsdom
+npm run test:print       # Cetak Kehadiran Guru: lebar kolom & orientasi kertas
+```
+
 Pengujian mencakup: login admin/guru/siswa, pembatasan data per kelas untuk
 cakupan `sendiri` dan `kelas`, penolakan `state/save` oleh siswa, validasi
-username, serta pencabutan sesi saat akun siswa dihapus.
+username, serta pencabutan sesi saat akun siswa dihapus. `test:print`
+memastikan total lebar kolom cetak kehadiran **tepat 100%** (tidak terpotong)
+untuk 1–14 kategori keterangan, orientasi A4 otomatis (portrait ≤6 kategori,
+landscape ≥7), header berulang tiap halaman, dan baris tidak terbelah.
