@@ -10,6 +10,7 @@
     "test:schema": "node tools/schema-check.mjs",
     "test:print": "node tools/print-kehadiran-check.mjs",
     "test:print-shadow": "node tools/print-shadow-check.mjs",
-    "print:preview": "node tools/print-preview.mjs"
+    "print:preview": "node tools/print-preview.mjs",
+    "test:keterangan": "node tools/keterangan-check.mjs"
   }
 }
