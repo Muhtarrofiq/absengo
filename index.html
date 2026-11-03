@@ -7527,7 +7527,24 @@
             if (!tanggal) return 0;
             const date = new Date(tanggal + 'T00:00:00');
             if (isNaN(date)) return 0;
-            return terapkanBatasJamTanggal(getJamJadwalHarian(guru, date.getDay()), tanggal);
+
+            const jadwal = getJamJadwalHarian(guru, date.getDay());
+            const batas = getBatasJamTanggal(tanggal);
+            if (batas <= 0) return jadwal;
+
+            // PENTING: batas memotong JAM, bukan hanya jumlah JP.
+            // Kalau guru dijadwalkan jam ke-6..10 dan batasnya 7, kotak yang tersedia
+            // hanya jam 6 dan 7 (2 JP). Menghitung target min(jadwal, batas) = 5 membuat
+            // sistem menagih 3 JP yang kotaknya bahkan tidak ada -> muncul
+            // "Kurang dari Target" padahal semua kotak sudah dicentang.
+            // Jadi target = jumlah jam mengajar yang benar-benar berada di dalam batas.
+            const jamKe = getJamKeMengajarGuru(guru, tanggal);
+            if (jamKe.length > 0) {
+                const jamDalamBatas = jamKe.filter(nomor => nomor <= batas).length;
+                return Math.min(jadwal, jamDalamBatas);
+            }
+            // Data lama tanpa daftar jam ke-: anggap jam mengajar berurutan dari jam 1.
+            return Math.min(jadwal, batas);
         }
 
         // Jumlah kolom Jam ke- yang benar-benar DITAMPILKAN pada tanggal tersebut.

@@ -263,5 +263,94 @@ console.log('\n-- 10. Cetak Kehadiran Guru memakai target per tanggal --');
   check('cetak: Absen kosong', tds[iAbsen] === '', JSON.stringify(tds[iAbsen]));
 }
 
+// ---------------------------------------------------------------------------
+console.log('\n-- 11. Jam mengajar di LUAR batas tidak boleh jadi "kurang target" --');
+{
+  // Kasus laporan pengguna: guru mengajar jam ke-6..10 (5 JP), batas tanggal 7.
+  // Kotak yang tersedia hanya jam 6 dan 7 (2 JP), semuanya bisa dicentang.
+  const JUMAT = '2026-10-09'; // 9 Oktober 2026
+  check('9 Oktober 2026 memang hari Jumat', new Date(JUMAT + 'T00:00:00').getDay() === 5);
+
+  ev(`
+    batasJamPerTanggalCache = {};
+    setBatasJamTanggal('${JUMAT}', 7);
+    dataGuru = [{
+      id: 'g9', kode: 'J', nama: 'Guru Jam Sore', jabatan: 'Guru Tetap', nip: '9',
+      jenisKelamin: 'L', aktif: true, honor: {}, jadwal: { 0: 0, 1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 0 },
+      jadwalHarian: { 1: 5, 2: 5, 3: 5, 4: 5, 5: 5 },
+      jamKeHarian: { 1: [1,2,3,4,5], 2: [1,2,3,4,5], 3: [1,2,3,4,5], 4: [1,2,3,4,5], 5: [6,7,8,9,10] }
+    }];
+    taSet('dataGuru_v2', dataGuru);
+  `);
+
+  const target = ev(`getTargetJamGuruTanggal(dataGuru[0], '${JUMAT}')`);
+  check('target = 2 JP (hanya jam 6,7 yang di dalam batas)', target === 2, String(target));
+
+  const slots = ev(`getSlotJamDenganReferensi(dataGuru[0], 2, 10, '${JUMAT}')`);
+  const aktif = slots.filter(x => x.aktif).map(x => x.nomor);
+  check('kotak yang tersedia hanya jam 6 dan 7', JSON.stringify(aktif) === JSON.stringify([6, 7]), JSON.stringify(aktif));
+
+  // Semua kotak dicentang -> tidak boleh ada kekurangan.
+  ev(`dataKehadiran = [{ id:'k9', guruId:'g9', tanggal:'${JUMAT}', jumlah:2, jamKeHadir:[6,7], keterangan:'' }];
+      taSet('dataKehadiran', dataKehadiran);`);
+  const r = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${JUMAT}'])`);
+  check('hadir = 2 JP (semua kotak tercentang)', r.jumlahHadir === 2, String(r.jumlahHadir));
+  check('absen = 0 (tidak ada kotak kosong)', r.jumlahAbsen === 0, String(r.jumlahAbsen));
+
+  // Daftar kehadiran: sel tidak berwarna kuning & Jml Absen kosong.
+  ev(`document.getElementById('filterKehadiranDari').value = '${JUMAT}'`);
+  ev(`document.getElementById('filterKehadiranSampai').value = '${JUMAT}'`);
+  ev(`document.getElementById('searchKehadiran').value = ''`);
+  ev(`renderTabelKehadiran()`);
+  await sleep(120);
+  const sel = ev(`(function(){
+    const tr = document.querySelector('#tabelKehadiran tr');
+    if (!tr) return null;
+    const td = [...tr.children];
+    const th = [...document.querySelectorAll('#theadKehadiran th')].map(x => x.textContent.trim());
+    const iAbsen = th.findIndex(x => /Jml Absen/i.test(x));
+    const selHarian = td[2];
+    return {
+      kelasSel: selHarian.innerHTML,
+      absen: td[iAbsen] ? td[iAbsen].textContent.trim() : null
+    };
+  })()`);
+  check('sel tanggal TIDAK kuning (tidak "Kurang dari Target")',
+    sel && !/bg-yellow-(300|400)/.test(sel.kelasSel), sel ? sel.kelasSel.slice(0, 120) : 'baris kosong');
+  check('sel tanggal TIDAK merah', sel && !/bg-red-(600|700)/.test(sel.kelasSel));
+  check('Jml Absen kosong ("-")', sel && sel.absen === '-', sel ? sel.absen : '-');
+
+  // Bila memang kurang (mis. hanya 1 JP tercatat), Absen tetap muncul.
+  ev(`dataKehadiran = [{ id:'k9', guruId:'g9', tanggal:'${JUMAT}', jumlah:1, jamKeHadir:[6], keterangan:'' }];
+      taSet('dataKehadiran', dataKehadiran);`);
+  const r2 = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${JUMAT}'])`);
+  check('kalau benar-benar kurang: absen = 1', r2.jumlahAbsen === 1, String(r2.jumlahAbsen));
+  ev(`renderTabelKehadiran()`);
+  await sleep(100);
+  const sel2 = ev(`document.querySelector('#tabelKehadiran tr').children[2].innerHTML`);
+  check('sel jadi kuning saat memang kurang', /bg-yellow-(300|400)/.test(sel2), sel2.slice(0, 100));
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n-- 12. Guru dengan jam mengajar semuanya di atas batas --');
+{
+  const JUMAT = '2026-10-09';
+  ev(`
+    dataGuru = [{
+      id: 'g10', kode: 'S', nama: 'Guru Sore Penuh', jabatan: 'Guru Tetap', nip: '10',
+      jenisKelamin: 'L', aktif: true, honor: {}, jadwal: { 0: 0, 1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 0 },
+      jadwalHarian: { 1: 3, 2: 3, 3: 3, 4: 3, 5: 3 },
+      jamKeHarian: { 1: [1,2,3], 2: [1,2,3], 3: [1,2,3], 4: [1,2,3], 5: [8,9,10] }
+    }];
+    taSet('dataGuru_v2', dataGuru);
+    dataKehadiran = [{ id:'k10', guruId:'g10', tanggal:'${JUMAT}', jumlah:3, keterangan:'' }];
+    taSet('dataKehadiran', dataKehadiran);
+  `);
+  const target = ev(`getTargetJamGuruTanggal(dataGuru[0], '${JUMAT}')`);
+  check('target = 0 (tidak ada jam di dalam batas)', target === 0, String(target));
+  const r = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${JUMAT}'])`);
+  check('tidak menagih absen', r.jumlahAbsen === 0, String(r.jumlahAbsen));
+}
+
 console.log(`\n===== BATAS JAM PER TANGGAL: ${pass} lolos, ${fail} gagal =====`);
 process.exit(fail ? 1 : 0);
