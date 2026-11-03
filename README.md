@@ -212,7 +212,12 @@ Aturan kerjanya:
 - Kolom yang ditampilkan = `min(jumlah kolom, batas tanggal itu)`.
   Batas tidak pernah menambah kolom.
 - Jam ke- di atas batas tidak ditampilkan dan tidak bisa dicentang.
-- Target harian dipotong: `min(jadwal JP, batas tanggal)`.
+- Target harian dipotong **per jam, bukan hanya per JP**: yang dihitung hanya jam
+  mengajar yang benar-benar berada di dalam batas. Contoh Jumat 9/10/2026 guru
+  dijadwalkan jam ke-6..10 (5 JP) dengan batas 7 → kotak yang tersedia hanya jam
+  6 dan 7, jadi target = **2 JP**. Kalau semua kotak sudah dicentang, tidak ada
+  "Kurang dari Target" dan Jml Absen kosong. Guru yang seluruh jamnya di atas
+  batas → target 0 (tidak ditagih).
 - **Kehadiran juga dipotong.** Tercatat 10 JP dengan batas 7 dihitung 7 JP; sisa 3 JP
   tidak masuk Jml Hadir, Total, maupun cetakan. Di daftar kehadiran, sel harian
   menampilkan angka yang dihitung dengan penanda `(+3)` dan tooltip penjelasan.
