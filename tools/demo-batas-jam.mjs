@@ -85,11 +85,12 @@ document.addEventListener('DOMContentLoaded', function () {
 const banner = `<div style="position:fixed;right:16px;bottom:16px;z-index:9999;max-width:290px;
   background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:12px;padding:14px 16px;
   font-family:system-ui,sans-serif;font-size:12.5px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.45)">
-  <div style="font-weight:700;margin-bottom:6px;font-size:13px">Demo: Batas Jam per Hari</div>
+  <div style="font-weight:700;margin-bottom:6px;font-size:13px">Demo: Batas Jam Tampil</div>
   1. Buka menu <b>Input Kehadiran</b> → <b>Input Massal Jam Ke</b><br>
-  2. Pada panel <b>Batas Jam Pelajaran per Hari</b>, isi mis. <b>Senin = 7</b><br>
-  3. Pilih tanggal <b>Senin</b> → kolom jam menyusut mengikuti batas<br>
-  <span style="color:#94a3b8">Guru A berjadwal 10 JP, B 8 JP, C 6 JP.</span>
+  2. <b>Jumlah Kolom Jam ke-</b> sudah 10<br>
+  3. Di bawahnya, isi <b>Batas Jam yang Ditampilkan = 7</b><br>
+  4. Tabel langsung hanya menampilkan <b>Jam ke-1 s.d. 7</b><br>
+  <span style="color:#94a3b8">Guru A 10 JP, B 8 JP, C 6 JP — semuanya terpotong di 7.</span>
 </div>`;
 
 let hasil = sumber.replace(penanda, `${skripSeed}\n${penanda}`);
