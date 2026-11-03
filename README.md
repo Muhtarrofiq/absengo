@@ -184,6 +184,38 @@ npm install --no-save @electric-sql/pglite
 npm run test:schema      # instalasi baru, upgrade DB lama, idempotensi, constraint
 ```
 
+Uji batas jam pelajaran per hari (jsdom):
+
+```bash
+npm install --no-save jsdom
+npm run test:batas       # target terpotong, slot di atas batas, rekap & simpan massal
+```
+
+### Batas Jam Pelajaran per Hari
+
+Di modal **Input Kehadiran** (tab Individu maupun Massal) ada panel
+**Batas Jam Pelajaran per Hari** (Senin–Sabtu). Isi JP maksimal tiap hari;
+kosongkan bila hari itu tidak dibatasi.
+
+Aturan kerjanya:
+
+- Target harian guru = `min(jadwal JP, batas hari itu)`. Batas adalah **maksimum**,
+  jadi guru dengan jadwal 6 JP tetap 6 JP walau batasnya 7.
+- Jam ke- di atas batas **tidak bisa dicentang** dan tidak muncul sebagai Absen,
+  sehingga Prosentase tetap 100% (contoh: jadwal 10 JP, batas 7, hadir 7 → 100%).
+- Berlaku juga untuk rekap, cetak Cetak Kehadiran Guru, alasan ijin, dan generate
+  kehadiran dari jadwal.
+- Disimpan global di `localStorage` (`batasJamPerHariGlobal`), bukan per tahun ajaran,
+  karena sifatnya kebijakan sekolah. Kosong/tidak diisi = tanpa batas (perilaku lama).
+- Data lama tidak diubah: record yang sudah tersimpan tetap ada, hanya tidak
+  dihitung melebihi batas.
+
+Demo interaktif dengan data contoh:
+
+```bash
+npm run demo:batas       # -> /home/user/demo-batas-jam.html (buka dengan ?local)
+```
+
 Uji tata letak cetak (jsdom):
 
 ```bash
