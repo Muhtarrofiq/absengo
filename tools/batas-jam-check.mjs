@@ -1,4 +1,4 @@
-// Uji "Batas Jam yang Ditampilkan" (satu isian global) pada Input Kehadiran.
+// Uji "Batas Jam per Tanggal" pada Input Kehadiran, plus kolom Jml Absen di daftar kehadiran.
 // Jalankan: npm install --no-save jsdom && node tools/batas-jam-check.mjs
 import fs from 'node:fs';
 let JSDOM, VirtualConsole;
@@ -28,19 +28,21 @@ window.alert = () => {};
 window.confirm = () => true;
 await sleep(300);
 
-// 2026-11-02 = Senin, 2026-11-03 = Selasa, 2026-11-05 = Kamis
 const SENIN = '2026-11-02';
 const SELASA = '2026-11-03';
-const KAMIS = '2026-11-05';
+const RABU = '2026-11-04';
+const ev = kode => window.eval(kode);
 
-window.eval(`
+// Guru contoh: jadwal 10 JP tiap hari kerja, Jam ke- 1..10.
+ev(`
   penggunaAktif = { username: 'admin', role: 'admin' };
   akunSiswaLogin = [];
+  localStorage.removeItem('batasJamPerTanggal');
   localStorage.removeItem('batasJamTampilGlobal');
   localStorage.removeItem('batasJamPerHariGlobal');
-  batasJamTampilCache = null;
+  batasJamPerTanggalCache = null;
   dataGuru = [{
-    id: 'g1', kode: 'A', nama: 'Guru Sepuluh Jam', jabatan: 'Guru Tetap',
+    id: 'g1', kode: 'A', nama: 'Guru Sepuluh Jam', jabatan: 'Guru Tetap', nip: '1',
     jenisKelamin: 'L', aktif: true, honor: {}, jadwal: { 0: 0, 1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 0 },
     jadwalHarian: { 1: 10, 2: 10, 3: 10, 4: 10, 5: 10 },
     jamKeHarian: { 1: [1,2,3,4,5,6,7,8,9,10], 2: [1,2,3,4,5,6,7,8,9,10], 3: [1,2,3,4,5,6,7,8,9,10], 4: [1,2,3,4,5,6,7,8,9,10], 5: [1,2,3,4,5,6,7,8,9,10] }
@@ -49,233 +51,217 @@ window.eval(`
   hariLiburList = [];
   taSet('dataGuru_v2', dataGuru);
   taSet('dataKehadiran', dataKehadiran);
-  document.getElementById('kehadiranTanggal').value = '${SENIN}';
+  document.getElementById('kehadiranJumlahKolom').value = '10';
 `);
 
-const ev = ekspresi => window.eval(ekspresi);
-
 // ---------------------------------------------------------------------------
-console.log('\n-- 1. Tanpa batas: perilaku lama tidak berubah --');
+console.log('\n-- 1. Awal: tanpa batas, tidak ada tanggal yang dibatasi --');
 {
-  check('getBatasJamTampil() = 0', ev('getBatasJamTampil()') === 0, String(ev('getBatasJamTampil()')));
-  check('getBatasJamHari(1) = 0', ev('getBatasJamHari(1)') === 0);
-  check('target Senin tetap 10 JP', ev(`getTargetJamGuruTanggal(dataGuru[0], '${SENIN}')`) === 10);
-  check('kolom tampil = jumlah kolom global (10)',
-    ev(`document.getElementById('kehadiranJumlahKolom').value = '10'; getJumlahKolomTampil()`) === 10);
+  check('getBatasJamTanggal(Senin) = 0', ev(`getBatasJamTanggal('${SENIN}')`) === 0);
+  check('daftar batas kosong', ev('getDaftarBatasJamTanggal()').length === 0);
+  check('target Senin = 10 JP', ev(`getTargetJamGuruTanggal(dataGuru[0], '${SENIN}')`) === 10);
+  check('kolom tampil Senin = 10', ev(`getJumlahKolomTampil('${SENIN}')`) === 10);
+  check('key lama tidak dipakai lagi',
+    ev(`localStorage.getItem('batasJamPerTanggal')`) === null);
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n-- 2. Satu isian di bawah Jumlah Kolom --');
+console.log('\n-- 2. Isi batas untuk SATU tanggal lewat form --');
 {
-  ev(`openModalKehadiranMassal()`);
-  await sleep(150);
+  ev(`openModalKehadiran()`);
+  await sleep(80);
+  ev(`document.getElementById('kehadiranTanggal').value = '${SENIN}'; tanggalInputKehadiranBerubah();`);
+  await sleep(80);
 
-  const adaInput = ev(`!!document.getElementById('batasJamTampil')`);
-  check('input #batasJamTampil ada', adaInput);
+  const adaInput = ev(`!!document.getElementById('batasJamTanggal')`);
+  check('input #batasJamTanggal ada', adaInput);
+  check('input lama #batasJamTampil sudah tidak ada', ev(`!document.getElementById('batasJamTampil')`));
+  check('label menyebut tanggal terpilih', /Sen 2\/11/.test(ev(`document.getElementById('labelBatasJamTanggal').textContent`)),
+    ev(`document.getElementById('labelBatasJamTanggal').textContent`));
 
-  // Tidak boleh ada lagi isian per hari.
-  const sisaPerHari = ev(`document.querySelectorAll('#batasJamPerHariContainer input, [id^="batasJamHari"]').length`);
-  check('isian per hari sudah dihapus', sisaPerHari === 0, `${sisaPerHari} isian tersisa`);
+  ev(`document.getElementById('batasJamTanggal').value = '7'`);
+  ev(`simpanBatasJamTanggalDariForm()`);
+  await sleep(80);
 
-  // Posisi: harus muncul setelah input jumlah kolom pada urutan DOM.
-  const urutan = ev(`(function(){
-    const a = document.getElementById('kehadiranJumlahKolom');
-    const b = document.getElementById('batasJamTampil');
-    return a && b ? (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? 'sesudah' : 'sebelum') : 'tidak-ada';
-  })()`);
-  check('posisi isian batas SETELAH jumlah kolom', urutan === 'sesudah', urutan);
-
-  const label = ev(`document.querySelector('label[for=""], #batasJamTampil')?.closest('div')?.parentElement?.querySelector('label')?.textContent.trim()`);
-  check('label menyebut Batas Jam', /Batas Jam/i.test(label || ''), String(label).slice(0, 60));
-
-  const placeholder = ev(`document.getElementById('batasJamTampil').getAttribute('placeholder')`);
-  check('placeholder menjelaskan kosong = tanpa batas', /tanpa batas/i.test(placeholder || ''), String(placeholder));
+  check('getBatasJamTanggal(Senin) = 7', ev(`getBatasJamTanggal('${SENIN}')`) === 7);
+  check('SELASA TIDAK ikut dibatasi', ev(`getBatasJamTanggal('${SELASA}')`) === 0);
+  check('Rabu TIDAK ikut dibatasi', ev(`getBatasJamTanggal('${RABU}')`) === 0);
+  const peta = JSON.parse(ev(`localStorage.getItem('batasJamPerTanggal')`));
+  check('tersimpan per tanggal di localStorage', peta[SENIN] === 7 && Object.keys(peta).length === 1, JSON.stringify(peta));
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n-- 3. Isi batas 7 (jumlah kolom 10) lewat form --');
+console.log('\n-- 3. Target & kolom hanya berubah di tanggal itu --');
 {
-  ev(`document.getElementById('kehadiranJumlahKolom').value = '10'`);
-  ev(`document.getElementById('batasJamTampil').value = '7'`);
-  ev(`simpanBatasJamTampilDariForm()`);
-  await sleep(100);
+  check('target Senin = 7 JP', ev(`getTargetJamGuruTanggal(dataGuru[0], '${SENIN}')`) === 7,
+    String(ev(`getTargetJamGuruTanggal(dataGuru[0], '${SENIN}')`)));
+  check('target Selasa tetap 10 JP', ev(`getTargetJamGuruTanggal(dataGuru[0], '${SELASA}')`) === 10);
+  check('kolom tampil Senin = 7', ev(`getJumlahKolomTampil('${SENIN}')`) === 7);
+  check('kolom tampil Selasa = 10', ev(`getJumlahKolomTampil('${SELASA}')`) === 10);
 
-  check('getBatasJamTampil() = 7', ev('getBatasJamTampil()') === 7, String(ev('getBatasJamTampil()')));
-  check('tersimpan di localStorage', ev(`localStorage.getItem('batasJamTampilGlobal')`) === '7');
-  check('kolom tampil = 7 (dinamis)', ev('getJumlahKolomTampil()') === 7, String(ev('getJumlahKolomTampil()')));
-  check('jumlah kolom global tetap 10', ev('getJumlahKolomKehadiran()') === 10);
-  const info = ev(`document.getElementById('infoBatasJamTampil').textContent`);
-  check('info menjelaskan Jam ke-1 s.d. 7', /1 s\.d\. 7/.test(info), info);
+  const slotSenin = ev(`getSlotJamDenganReferensi(dataGuru[0], 7, 10, '${SENIN}')`);
+  const slotSelasa = ev(`getSlotJamDenganReferensi(dataGuru[0], 10, 10, '${SELASA}')`);
+  check('slot Senin: 1–7 aktif, 8–10 mati',
+    slotSenin.slice(0, 7).every(x => x.aktif) && slotSenin.slice(7).every(x => !x.aktif));
+  check('slot Selasa: semua 10 aktif', slotSelasa.every(x => x.aktif));
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n-- 4. Batas berlaku untuk SEMUA hari (bukan per hari) --');
+console.log('\n-- 4. Pindah tanggal memuat batas tanggal itu --');
 {
-  check('Senin -> 7', ev(`getTargetJamGuruTanggal(dataGuru[0], '${SENIN}')`) === 7);
-  check('Selasa -> 7', ev(`getTargetJamGuruTanggal(dataGuru[0], '${SELASA}')`) === 7);
-  check('Kamis -> 7', ev(`getTargetJamGuruTanggal(dataGuru[0], '${KAMIS}')`) === 7);
-  check('getBatasJamHari tidak lagi beda per hari',
-    ev('[1,2,3,4,5,6].every(h => getBatasJamHari(h) === 7)'));
+  ev(`document.getElementById('kehadiranTanggal').value = '${SENIN}'; tanggalInputKehadiranBerubah();`);
+  await sleep(60);
+  check('Senin: isian menampilkan 7', ev(`document.getElementById('batasJamTanggal').value`) === '7');
+  ev(`document.getElementById('kehadiranTanggal').value = '${SELASA}'; tanggalInputKehadiranBerubah();`);
+  await sleep(60);
+  check('Selasa: isian kosong (tidak dibatasi)', ev(`document.getElementById('batasJamTanggal').value`) === '');
+
+  ev(`document.getElementById('batasJamTanggal').value = '5'`);
+  ev(`simpanBatasJamTanggalDariForm()`);
+  await sleep(80);
+  check('Selasa kini dibatasi 5', ev(`getBatasJamTanggal('${SELASA}')`) === 5);
+  check('Senin tetap 7', ev(`getBatasJamTanggal('${SENIN}')`) === 7);
+  check('chip daftar berisi 2 tanggal', ev(`document.querySelectorAll('#daftarBatasJamTanggal span.inline-flex').length`) === 2);
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n-- 5. Batas sebagai maksimum, bukan menambah kolom --');
+console.log('\n-- 5. Rekap: hadir dipotong & Absen kosong hanya di tanggal yang dibatasi --');
 {
-  ev(`dataGuru.push({ id:'g2', kode:'B', nama:'Guru Lima Jam', jabatan:'-', jenisKelamin:'L', aktif:true, honor:{}, jadwalHarian:{1:5,2:5,3:5,4:5,5:5} })`);
-  check('jadwal 5 dengan batas 7 -> tetap 5 JP', ev(`getTargetJamGuruTanggal(dataGuru[1], '${SENIN}')`) === 5);
-  ev(`dataGuru.pop()`);
+  // Senin tercatat 10 JP (batas 7), Selasa tercatat 10 JP (batas 5).
+  ev(`dataKehadiran = [
+    { id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:10, keterangan:'' },
+    { id:'k2', guruId:'g1', tanggal:'${SELASA}', jumlah:10, keterangan:'' }
+  ]; taSet('dataKehadiran', dataKehadiran);`);
 
-  ev(`document.getElementById('kehadiranJumlahKolom').value = '5'`);
-  check('batas 7 tapi jumlah kolom 5 -> tampil 5', ev('getJumlahKolomTampil()') === 5, String(ev('getJumlahKolomTampil()')));
-  ev(`document.getElementById('kehadiranJumlahKolom').value = '10'`);
+  const r = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${SENIN}','${SELASA}'])`);
+  check('hadir dipotong = 7 + 5 = 12', r.jumlahHadir === 12, String(r.jumlahHadir));
+  check('target = 7 + 5 = 12', r.totalJamJadwal === 12, String(r.totalJamJadwal));
+  check('absen 0 (kedua tanggal penuh)', r.jumlahAbsen === 0, String(r.jumlahAbsen));
+  check('rincianAbsen kosong', (r.rincianAbsen || []).length === 0);
+
+  // Selasa kurang: catat 3 JP (batas 5) -> absen 2 hanya di Selasa.
+  ev(`dataKehadiran = [
+    { id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:10, keterangan:'' },
+    { id:'k2', guruId:'g1', tanggal:'${SELASA}', jumlah:3, keterangan:'' }
+  ]; taSet('dataKehadiran', dataKehadiran);`);
+  const r2 = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${SENIN}','${SELASA}'])`);
+  check('hadir = 7 + 3 = 10', r2.jumlahHadir === 10, String(r2.jumlahHadir));
+  check('absen = 2 (hanya Selasa)', r2.jumlahAbsen === 2, String(r2.jumlahAbsen));
+  check('rincian menyebut Selasa', (r2.rincianAbsen || []).some(x => x.tanggal === SELASA && x.kurang === 2),
+    JSON.stringify(r2.rincianAbsen));
+  check('Senin tidak masuk rincian', !(r2.rincianAbsen || []).some(x => x.tanggal === SENIN));
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n-- 6. Slot jam di atas batas tidak bisa dicentang --');
+console.log('\n-- 6. Daftar list kehadiran: sel harian & kolom Jml Absen --');
 {
-  const slots = ev(`getSlotJamDenganReferensi(dataGuru[0], 7, 10, '${SENIN}')`);
-  check('jumlah slot = 10 objek', slots.length === 10);
-  check('jam 1–7 aktif', [1,2,3,4,5,6,7].every(n => slots[n - 1].aktif));
-  check('jam 8,9,10 non-aktif', [8,9,10].every(n => slots[n - 1].aktif === false));
-}
-
-// ---------------------------------------------------------------------------
-console.log('\n-- 7. Rekap: sisa jam tidak jadi Absen --');
-{
-  ev(`dataKehadiran = [{ id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:7, keterangan:'' }]`);
-  ev(`taSet('dataKehadiran', dataKehadiran)`);
-  const r = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${SENIN}'])`);
-  check('hadir 7 JP', r.jumlahHadir === 7);
-  check('absen 0 JP', r.jumlahAbsen === 0);
-  check('target 7 JP', r.totalJamJadwal === 7);
-  const baris = ev(`getDataRekapKehadiranGuru(11, 2026).find(x => x.guruId === 'g1')`);
-  check('rekap prosentase 100%', Math.round(baris.prosentase) === 100, String(baris.prosentase));
-  check('tidak ada alasan ijin palsu', ev(`getAlasanIzinGuru(dataGuru[0], ['${SENIN}'])`) === '-');
-}
-
-// ---------------------------------------------------------------------------
-console.log('\n-- 8. Hadir MELEBIHI batas: dipotong & Absen kosong --');
-{
-  ev(`dataKehadiran = [{ id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:10, keterangan:'' }]`);
-  const r = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${SENIN}'])`);
-  check('hadir dipotong jadi 7 JP', r.jumlahHadir === 7, String(r.jumlahHadir));
-  check('absen 0 JP', r.jumlahAbsen === 0);
-  check('total = 7 JP', r.jumlahTotal === 7);
-  const baris = ev(`getDataRekapKehadiranGuru(11, 2026).find(x => x.guruId === 'g1')`);
-  check('rekap kehadiran 7 JP', baris.kehadiran === 7, String(baris.kehadiran));
-
-  // Daftar layar: Jml Absen tampil "-"
   ev(`document.getElementById('filterKehadiranDari').value = '${SENIN}'`);
   ev(`document.getElementById('filterKehadiranSampai').value = '2026-11-06'`);
   ev(`renderTabelKehadiran()`);
   await sleep(120);
-  const selAbsen = ev(`(function(){
-    const th = [...document.querySelectorAll('#theadKehadiran th')].find(t => /Jml Absen/i.test(t.textContent));
-    if (!th) return 'kolom-tidak-ada';
-    const idx = [...th.parentNode.children].indexOf(th);
-    const baris = document.querySelector('#tabelKehadiran tr');
-    return baris ? baris.children[idx].textContent.trim() : 'baris-tidak-ada';
+
+  const info = ev(`(function(){
+    const th = [...document.querySelectorAll('#theadKehadiran th')].map(t => t.textContent.trim());
+    const tr = document.querySelector('#tabelKehadiran tr');
+    const td = [...tr.children];
+    const ambil = nama => {
+      const i = th.findIndex(h => new RegExp(nama, 'i').test(h));
+      return i < 0 ? null : { teks: td[i].textContent.trim(), title: td[i].getAttribute('title') };
+    };
+    return {
+      harian: td.slice(2, 7).map(x => x.textContent.trim()),
+      hadir: ambil('Jml Hadir'), absen: ambil('Jml Absen'), target: ambil('Jml Jam Target')
+    };
   })()`);
-  check('daftar layar: Jml Absen kosong ("-")', selAbsen === '-', JSON.stringify(selAbsen));
+
+  check('target baris = 12 JP (7 + 5)', info.target.teks === '12', info.target.teks);
+  check('hadir baris = 10 JP', info.hadir.teks === '10', info.hadir.teks);
+  check('Jml Absen = 2', info.absen.teks === '2', info.absen.teks);
+  check('tooltip Jml Absen menyebut tanggal & jumlah',
+    /Sel 3\/11\/26 \(2 JP\)/.test(info.absen.title || ''), info.absen.title);
+  check('sel Senin menampilkan 7j (dipotong dari 10)', /^7j/.test(info.harian[0]), info.harian[0]);
+  check('sel Senin menandai +3 yang dipotong', /\+3/.test(info.harian[0]), info.harian[0]);
+  check('sel Selasa menampilkan 3j tanpa potongan', /^3j/.test(info.harian[1]) && !/\+/.test(info.harian[1]), info.harian[1]);
+  check('sel Rabu tetap kosong (tidak ada data)', info.harian[2] === '-', info.harian[2]);
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n-- 9. Kurang dari batas tetap dihitung Absen --');
+console.log('\n-- 7. Daftar: tanggal penuh -> Jml Absen kosong --');
 {
-  ev(`dataKehadiran = [{ id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:5, keterangan:'' }]`);
-  const r = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${SENIN}'])`);
-  check('hadir 5 JP', r.jumlahHadir === 5);
-  check('absen 2 JP (7 - 5)', r.jumlahAbsen === 2, String(r.jumlahAbsen));
-}
-
-// ---------------------------------------------------------------------------
-console.log('\n-- 10. Tabel Input Massal hanya menampilkan kolom sampai batas --');
-{
-  ev(`dataKehadiran = []`);
-  ev(`document.getElementById('batasJamTampil').value = '7'`);
-  ev(`simpanBatasJamTampilDariForm()`);
-  ev(`document.getElementById('kehadiranTanggal').value = '${SENIN}'`);
-  ev(`tanggalInputKehadiranBerubah()`);
-  ev(`renderInputKehadiranMassal()`);
-  await sleep(120);
-
-  const idAman = ev(`String(dataGuru[0].id).replace(/[^A-Za-z0-9_-]/g, '_')`);
-  const kotak = ev(`document.querySelectorAll('.mass-jam-${idAman}').length`);
-  check('hanya 7 kotak centang (bukan 10)', kotak === 7, `${kotak} kotak`);
-
-  const headerJam = ev(`[...document.querySelectorAll('#theadInputKehadiranMassal th')].filter(t => /Jam\\s*ke-/.test(t.textContent)).length`);
-  check('header tabel hanya Jam ke-1..7', headerJam === 7, `${headerJam} kolom jam`);
-
-  const target = ev(`document.querySelector('#mass-row-${idAman} td:nth-last-child(3)').textContent.trim()`);
-  check('kolom Target Mengajar = 7 JP', target === '7 JP', target);
-
-  ev(`centangSemuaJamMassal()`);
-  await sleep(60);
-  check('centang semua maksimal 7 JP', ev(`jumlahJamDariKotak(document.getElementById('mass-row-${idAman}'))`) === 7);
-
-  ev(`simpanKehadiranMassal()`);
+  ev(`dataKehadiran = [
+    { id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:10, keterangan:'' },
+    { id:'k2', guruId:'g1', tanggal:'${SELASA}', jumlah:5, keterangan:'' }
+  ]; taSet('dataKehadiran', dataKehadiran);`);
+  ev(`renderTabelKehadiran()`);
   await sleep(100);
-  const rec = ev(`dataKehadiran.find(k => k.guruId === 'g1' && k.tanggal === '${SENIN}')`);
-  check('tersimpan 7 JP', rec && Number(rec.jumlah) === 7, rec ? String(rec.jumlah) : '-');
-  check('jamKeHadir = [1..7]', rec && JSON.stringify(rec.jamKeHadir) === JSON.stringify([1,2,3,4,5,6,7]),
-    rec ? JSON.stringify(rec.jamKeHadir) : '-');
+  const info = ev(`(function(){
+    const th = [...document.querySelectorAll('#theadKehadiran th')].map(t => t.textContent.trim());
+    const tr = document.querySelector('#tabelKehadiran tr');
+    const td = [...tr.children];
+    const i = th.findIndex(h => /Jml Absen/i.test(h));
+    return { teks: td[i].textContent.trim(), title: td[i].getAttribute('title') };
+  })()`);
+  check('Jml Absen kosong ("-") saat semua tanggal penuh', info.teks === '-', info.teks);
+  check('tooltip menjelaskan penuh', /Penuh/.test(info.title || ''), info.title);
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n-- 11. Mode individu juga mengikuti batas --');
+console.log('\n-- 8. Input massal mengikuti batas tanggal terpilih --');
 {
-  ev(`document.getElementById('kehadiranGuruId').value = 'g1'`);
-  ev(`ubahModeInputKehadiran('individu')`);
-  ev(`renderInputKehadiranIndividu()`);
-  await sleep(120);
-  const slotAktif = ev(`document.querySelectorAll('#slotJamKehadiranIndividu input[data-jam-slot]').length`);
-  check('slot jam individu = 7', slotAktif === 7, `${slotAktif} slot`);
+  ev(`openModalKehadiranMassal()`);
+  await sleep(80);
+  ev(`document.getElementById('kehadiranTanggal').value = '${SENIN}'; tanggalInputKehadiranBerubah(); renderInputKehadiranMassal();`);
+  await sleep(100);
+  const kotakSenin = ev(`document.querySelectorAll('.mass-jam-g1').length`);
+  check('Senin (batas 7): 7 kotak centang', kotakSenin === 7, `${kotakSenin} kotak`);
+  const targetSel = ev(`document.querySelector('#mass-row-g1 td:nth-last-child(3)').textContent.trim()`);
+  check('kolom Target Mengajar = 7 JP', targetSel === '7 JP', targetSel);
+
+  ev(`document.getElementById('kehadiranTanggal').value = '${SELASA}'; tanggalInputKehadiranBerubah(); renderInputKehadiranMassal();`);
+  await sleep(100);
+  check('Selasa (batas 5): 5 kotak centang', ev(`document.querySelectorAll('.mass-jam-g1').length`) === 5);
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n-- 12. Cetak Kehadiran Guru memakai batas --');
+console.log('\n-- 9. Hapus batas satu tanggal tidak menghapus tanggal lain --');
 {
+  const tanggalChip = ev(`document.querySelectorAll('#daftarBatasJamTanggal span.inline-flex button')[1]`);
+  check('tombol hapus pada chip tersedia', !!tanggalChip);
+  ev(`hapusBatasJamTanggalDariDaftar('${SENIN}')`);
+  await sleep(80);
+  check('Senin kembali tanpa batas', ev(`getBatasJamTanggal('${SENIN}')`) === 0);
+  check('Selasa masih dibatasi 5', ev(`getBatasJamTanggal('${SELASA}')`) === 5);
+  check('target Senin kembali 10 JP', ev(`getTargetJamGuruTanggal(dataGuru[0], '${SENIN}')`) === 10);
+
+  ev(`document.getElementById('kehadiranTanggal').value = '${SELASA}'; tanggalInputKehadiranBerubah();`);
+  await sleep(60);
+  ev(`kosongkanBatasJamTanggal()`);
+  await sleep(80);
+  check('kini tidak ada tanggal dibatasi', ev('getDaftarBatasJamTanggal()').length === 0);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n-- 10. Cetak Kehadiran Guru memakai target per tanggal --');
+{
+  ev(`setBatasJamTanggal('${SENIN}', 7)`);
+  ev(`dataKehadiran = [{ id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:10, keterangan:'' }]; taSet('dataKehadiran', dataKehadiran);`);
   ev(`document.getElementById('printRekapArea').innerHTML = ''`);
-  ev(`document.getElementById('rekapBulan').value = '11'`);
-  ev(`document.getElementById('rekapTahun').value = '2026'`);
-  ev(`dataKehadiran = [{ id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:10, keterangan:'' }]`);
-  ev(`taSet('dataKehadiran', dataKehadiran)`);
+  ev(`document.getElementById('rekapBulan').value = '11'; document.getElementById('rekapTahun').value = '2026';`);
   ev(`cetakRekapKehadiranGuru()`);
   await sleep(150);
   const isi = ev(`document.getElementById('printRekapArea').innerHTML`);
   check('dokumen cetak terbentuk', isi.length > 500, `${isi.length} byte`);
-  check('kolom Jml Target menampilkan 7', /<td class="center"><strong>7<\/strong><\/td>/.test(isi));
-  check('kolom Kehadiran 7 (bukan 10)', /<td class="right"[^>]*>7<\/td>/.test(isi));
-  check('tidak ada prosentase turun', !/>\d{1,2}%</.test(isi) || !/>70%</.test(isi));
+  const d = new JSDOM(isi);
+  const th = [...d.window.document.querySelectorAll('table.data-kehadiran thead th')].map(x => x.textContent.trim());
+  const tds = [...d.window.document.querySelectorAll('table.data-kehadiran tbody tr')[0].querySelectorAll('td')]
+    .map(x => x.textContent.trim());
+  const iTarget = th.findIndex(x => /Target/i.test(x));
+  const iHadir = th.findIndex(x => /^Kehadiran/i.test(x));
+  const iAbsen = th.findIndex(x => /^Absen/i.test(x));
+  check('cetak: Jml Target = 7', tds[iTarget] === '7', tds[iTarget]);
+  check('cetak: Kehadiran = 7', tds[iHadir] === '7', tds[iHadir]);
+  check('cetak: Absen kosong', tds[iAbsen] === '', JSON.stringify(tds[iAbsen]));
 }
 
-// ---------------------------------------------------------------------------
-console.log('\n-- 13. Kosongkan batas = kembali seperti semula --');
-{
-  ev(`kosongkanBatasJamTampil()`);
-  await sleep(100);
-  check('localStorage kosong', ev(`localStorage.getItem('batasJamTampilGlobal')`) === '0');
-  check('getBatasJamTampil() = 0', ev('getBatasJamTampil()') === 0);
-  check('target Senin kembali 10 JP', ev(`getTargetJamGuruTanggal(dataGuru[0], '${SENIN}')`) === 10);
-  ev(`document.getElementById('kehadiranTanggal').value = '${SENIN}'`);
-  ev(`tanggalInputKehadiranBerubah()`);
-  ev(`renderInputKehadiranMassal()`);
-  await sleep(100);
-  const idAman = ev(`String(dataGuru[0].id).replace(/[^A-Za-z0-9_-]/g, '_')`);
-  check('kotak centang kembali 10', ev(`document.querySelectorAll('.mass-jam-${idAman}').length`) === 10);
-}
-
-// ---------------------------------------------------------------------------
-console.log('\n-- 14. Migrasi dari setelan lama (batas per hari) --');
-{
-  ev(`localStorage.removeItem('batasJamTampilGlobal'); batasJamTampilCache = null;`);
-  ev(`localStorage.setItem('batasJamPerHariGlobal', JSON.stringify({ '1': 7, '2': 7, '3': 5 }))`);
-  ev(`batasJamTampilCache = null; getBatasJamTampil()`);
-  check('nilai terbanyak (7) dipakai sebagai batas awal', ev('getBatasJamTampil()') === 7, String(ev('getBatasJamTampil()')));
-
-  ev(`localStorage.removeItem('batasJamPerHariGlobal'); localStorage.setItem('batasJamTampilGlobal','0'); batasJamTampilCache = null; getBatasJamTampil()`);
-  check('tanpa setelan lama -> tanpa batas', ev('getBatasJamTampil()') === 0);
-}
-
-console.log(`\n===== BATAS JAM TAMPIL: ${pass} lolos, ${fail} gagal =====`);
+console.log(`\n===== BATAS JAM PER TANGGAL: ${pass} lolos, ${fail} gagal =====`);
 process.exit(fail ? 1 : 0);
