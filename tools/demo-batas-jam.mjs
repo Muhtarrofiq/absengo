@@ -1,4 +1,4 @@
-// Membuat halaman demo mandiri untuk mencoba fitur "Batas Jam Pelajaran per Hari".
+// Membuat halaman demo mandiri untuk mencoba fitur "Batas Jam per Tanggal".
 // Memakai index.html ASLI, hanya menambahkan data contoh ke localStorage sebelum app jalan.
 // Jalankan: node tools/demo-batas-jam.mjs [berkas-keluaran]
 import fs from 'node:fs';
@@ -85,12 +85,12 @@ document.addEventListener('DOMContentLoaded', function () {
 const banner = `<div style="position:fixed;right:16px;bottom:16px;z-index:9999;max-width:290px;
   background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:12px;padding:14px 16px;
   font-family:system-ui,sans-serif;font-size:12.5px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.45)">
-  <div style="font-weight:700;margin-bottom:6px;font-size:13px">Demo: Batas Jam Tampil</div>
+  <div style="font-weight:700;margin-bottom:6px;font-size:13px">Demo: Batas Jam per Tanggal</div>
   1. Buka menu <b>Input Kehadiran</b> → <b>Input Massal Jam Ke</b><br>
-  2. <b>Jumlah Kolom Jam ke-</b> sudah 10<br>
-  3. Di bawahnya, isi <b>Batas Jam yang Ditampilkan = 7</b><br>
-  4. Tabel langsung hanya menampilkan <b>Jam ke-1 s.d. 7</b><br>
-  <span style="color:#94a3b8">Guru A 10 JP, B 8 JP, C 6 JP — semuanya terpotong di 7.</span>
+  2. Pilih <b>Tanggal Kehadiran</b>, mis. Senin 2/11/2026<br>
+  3. Isi <b>Batas Jam untuk Tanggal Ini = 7</b><br>
+  4. Tabel hanya menampilkan <b>Jam ke-1 s.d. 7</b>; ganti ke tanggal lain &rarr; kembali 10<br>
+  <span style="color:#94a3b8">Guru A 10 JP, B 8 JP, C 6 JP. Batas hanya berlaku di tanggal yang dipilih.</span>
 </div>`;
 
 let hasil = sumber.replace(penanda, `${skripSeed}\n${penanda}`);
@@ -102,4 +102,4 @@ const keluar = path.resolve(process.argv[2] || '/home/user/demo-batas-jam.html')
 fs.writeFileSync(keluar, hasil, 'utf8');
 console.log(`OK -> ${keluar}`);
 console.log(`   ${guruDemo.length} guru contoh (10 JP / 8 JP / 6 JP), tahun ajaran ${TA}`);
-console.log(`   login: admin / admin123 — batas jam sengaja dikosongkan agar bisa Anda isi sendiri.`);
+console.log(`   login: admin / admin123 — belum ada batas; isi sendiri per tanggal.`);

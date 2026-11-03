@@ -184,38 +184,45 @@ npm install --no-save @electric-sql/pglite
 npm run test:schema      # instalasi baru, upgrade DB lama, idempotensi, constraint
 ```
 
-Uji batas jam yang ditampilkan (jsdom):
+Uji batas jam per tanggal (jsdom):
 
 ```bash
 npm install --no-save jsdom
-npm run test:batas       # isian global, kolom dinamis, target/slot terpotong, rekap & simpan massal
+npm run test:batas       # batas per tanggal, kolom dinamis, rekap & kolom Jml Absen
 ```
 
-### Batas Jam yang Ditampilkan
+### Batas Jam per Tanggal
 
-Di modal **Input Kehadiran** ada **satu isian** tepat di bawah *Jumlah Kolom Jam ke- (Global)*:
+Di modal **Input Kehadiran** ada isian batas yang berlaku **hanya untuk tanggal
+yang sedang dipilih** (Tanggal Kehadiran), bukan untuk semua hari:
 
 ```
+Tanggal Kehadiran               [ 2026-11-02 ]
 Jumlah Kolom Jam ke- (Global)   [ 10 ]
-Batas Jam yang Ditampilkan      [  7 ]   <- hanya Jam ke-1 s.d. 7 yang tampil
+Batas Jam untuk Tanggal Ini     [  7 ]   (Sen 2/11/26)
+                              Tanggal dibatasi: [Sen 2/11/26 · 7 JP ×] [Sel 3/11/26 · 5 JP ×]
 ```
 
 Aturan kerjanya:
 
-- Satu angka berlaku untuk **semua hari** (bukan per hari).
-- Kolom yang ditampilkan = `min(jumlah kolom, batas)` — dinamis mengikuti isian.
-  Batas tidak pernah menambah kolom: batas 20 dengan jumlah kolom 10 tetap 10 kolom.
-- Kolom di atas batas **tidak ditampilkan** dan tidak bisa dicentang.
-- Target harian guru dipotong: `min(jadwal JP, batas)`.
-- **Kehadiran juga dipotong sebatas batas.** Tercatat 10 JP dengan batas 7 tetap
-  dihitung 7 JP — sisa 3 JP tidak masuk Jml Hadir, Total, maupun cetakan.
-- Hari yang sudah mencapai batas dianggap **penuh**, sehingga **Jml Absen
-  dikosongkan** (tampil "-") di daftar layar dan Cetak Kehadiran Guru, bukan 0.
-  Absen hanya terisi bila kehadiran benar-benar kurang (batas 7, hadir 5 → Absen 2).
-- Prosentase tetap 100% untuk hari yang penuh.
-- Kosong / 0 = **tanpa batas** (perilaku lama). Klik **Kosongkan** untuk menghapus.
-- Disimpan global di `localStorage` (`batasJamTampilGlobal`). Setelan lama per hari
-  (`batasJamPerHariGlobal`) dimigrasikan otomatis: nilai yang paling sering dipakai.
+- Batas berlaku **per tanggal**. Mengatur 2/11 = 7 tidak mengubah tanggal lain.
+  Pindah tanggal → isian otomatis menampilkan batas tanggal tersebut.
+- Chip **Tanggal dibatasi** menampilkan semua tanggal yang punya batas; klik namanya
+  untuk pindah ke tanggal itu, klik `×` untuk menghapus batas tanggal itu saja.
+- Kolom yang ditampilkan = `min(jumlah kolom, batas tanggal itu)`.
+  Batas tidak pernah menambah kolom.
+- Jam ke- di atas batas tidak ditampilkan dan tidak bisa dicentang.
+- Target harian dipotong: `min(jadwal JP, batas tanggal)`.
+- **Kehadiran juga dipotong.** Tercatat 10 JP dengan batas 7 dihitung 7 JP; sisa 3 JP
+  tidak masuk Jml Hadir, Total, maupun cetakan. Di daftar kehadiran, sel harian
+  menampilkan angka yang dihitung dengan penanda `(+3)` dan tooltip penjelasan.
+- Tanggal yang sudah mencapai batas dianggap **penuh**, sehingga **Jml Absen
+  dikosongkan** (tampil `-`), bukan 0. Absen hanya terisi bila benar-benar kurang
+  (batas 7, hadir 5 → Absen 2). Tooltip kolom Jml Absen memuat rincian per tanggal.
+- Kosong / 0 = tanpa batas untuk tanggal itu.
+- Disimpan di `localStorage` dengan key `batasJamPerTanggal`
+  (contoh: `{"2026-11-02":7,"2026-11-03":5}`). Key lama
+  (`batasJamTampilGlobal`, `batasJamPerHariGlobal`) sudah tidak dipakai.
 
 Demo interaktif dengan data contoh:
 
