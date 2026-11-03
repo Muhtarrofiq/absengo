@@ -184,38 +184,38 @@ npm install --no-save @electric-sql/pglite
 npm run test:schema      # instalasi baru, upgrade DB lama, idempotensi, constraint
 ```
 
-Uji batas jam pelajaran per hari (jsdom):
+Uji batas jam yang ditampilkan (jsdom):
 
 ```bash
 npm install --no-save jsdom
-npm run test:batas       # target terpotong, slot di atas batas, rekap & simpan massal
+npm run test:batas       # isian global, kolom dinamis, target/slot terpotong, rekap & simpan massal
 ```
 
-### Batas Jam Pelajaran per Hari
+### Batas Jam yang Ditampilkan
 
-Di modal **Input Kehadiran** (tab Individu maupun Massal) ada panel
-**Batas Jam Pelajaran per Hari** (Senin–Sabtu). Isi JP maksimal tiap hari;
-kosongkan bila hari itu tidak dibatasi.
+Di modal **Input Kehadiran** ada **satu isian** tepat di bawah *Jumlah Kolom Jam ke- (Global)*:
+
+```
+Jumlah Kolom Jam ke- (Global)   [ 10 ]
+Batas Jam yang Ditampilkan      [  7 ]   <- hanya Jam ke-1 s.d. 7 yang tampil
+```
 
 Aturan kerjanya:
 
-- Target harian guru = `min(jadwal JP, batas hari itu)`. Batas adalah **maksimum**,
-  jadi guru dengan jadwal 6 JP tetap 6 JP walau batasnya 7.
-- Jam ke- di atas batas **tidak bisa dicentang**.
-- **Kehadiran juga dipotong sebatas batas.** Bila tercatat 10 JP padahal batas 7,
-  yang dihitung tetap 7 JP — sisa 3 JP tidak masuk ke Jml Hadir, Total, honor per jam
-  rekap, maupun cetakan.
-- Hari yang sudah mencapai batas dianggap **penuh**, sehingga tidak ada kekurangan
-  target: **Jml Absen dikosongkan** (tampil "-") di daftar layar dan di Cetak
-  Kehadiran Guru, bukan 0. Absen hanya terisi bila kehadiran benar-benar kurang
-  (contoh: batas 7, hadir 5 → Absen 2).
+- Satu angka berlaku untuk **semua hari** (bukan per hari).
+- Kolom yang ditampilkan = `min(jumlah kolom, batas)` — dinamis mengikuti isian.
+  Batas tidak pernah menambah kolom: batas 20 dengan jumlah kolom 10 tetap 10 kolom.
+- Kolom di atas batas **tidak ditampilkan** dan tidak bisa dicentang.
+- Target harian guru dipotong: `min(jadwal JP, batas)`.
+- **Kehadiran juga dipotong sebatas batas.** Tercatat 10 JP dengan batas 7 tetap
+  dihitung 7 JP — sisa 3 JP tidak masuk Jml Hadir, Total, maupun cetakan.
+- Hari yang sudah mencapai batas dianggap **penuh**, sehingga **Jml Absen
+  dikosongkan** (tampil "-") di daftar layar dan Cetak Kehadiran Guru, bukan 0.
+  Absen hanya terisi bila kehadiran benar-benar kurang (batas 7, hadir 5 → Absen 2).
 - Prosentase tetap 100% untuk hari yang penuh.
-- Berlaku juga untuk rekap, cetak Cetak Kehadiran Guru, alasan ijin, dan generate
-  kehadiran dari jadwal.
-- Disimpan global di `localStorage` (`batasJamPerHariGlobal`), bukan per tahun ajaran,
-  karena sifatnya kebijakan sekolah. Kosong/tidak diisi = tanpa batas (perilaku lama).
-- Data lama tidak diubah: record yang sudah tersimpan tetap ada, hanya tidak
-  dihitung melebihi batas.
+- Kosong / 0 = **tanpa batas** (perilaku lama). Klik **Kosongkan** untuk menghapus.
+- Disimpan global di `localStorage` (`batasJamTampilGlobal`). Setelan lama per hari
+  (`batasJamPerHariGlobal`) dimigrasikan otomatis: nilai yang paling sering dipakai.
 
 Demo interaktif dengan data contoh:
 

@@ -1879,24 +1879,30 @@
                     </div>
                 </div>
 
-                <!-- Batas Jam Pelajaran per Hari -->
+                <!-- Batas Jam yang Ditampilkan (satu isian, di bawah Jumlah Kolom) -->
                 <div class="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-                        <label class="block text-sm font-medium text-gray-800 flex items-center gap-2">
-                            <i class="fas fa-hourglass-half text-amber-600"></i> Batas Jam Pelajaran per Hari
-                        </label>
-                        <button type="button" onclick="kosongkanBatasJamPerHari()"
-                            class="text-xs px-3 py-1.5 border border-amber-300 rounded-lg text-amber-800 hover:bg-amber-100">
-                            <i class="fas fa-eraser"></i> Kosongkan (tanpa batas)
+                    <div class="flex flex-wrap items-end justify-between gap-3">
+                        <div class="flex-1 min-w-[220px]">
+                            <label class="block text-sm font-medium text-gray-800 mb-1">
+                                <i class="fas fa-hourglass-half text-amber-600 mr-1"></i> Batas Jam yang Ditampilkan (Global)
+                            </label>
+                            <input type="number" id="batasJamTampil" min="0" max="24" step="1"
+                                placeholder="kosong = tanpa batas"
+                                onchange="simpanBatasJamTampilDariForm()"
+                                oninput="perbaruiInfoBatasJamTampil()"
+                                class="w-full px-4 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                            <p id="infoBatasJamTampil" class="text-xs mt-1 text-gray-500">
+                                Kosong = tanpa batas. Semua kolom Jam ke- ditampilkan.
+                            </p>
+                        </div>
+                        <button type="button" onclick="kosongkanBatasJamTampil()"
+                            class="text-xs px-3 py-2 border border-amber-300 rounded-lg text-amber-800 hover:bg-amber-100">
+                            <i class="fas fa-eraser"></i> Kosongkan
                         </button>
                     </div>
-                    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2" id="batasJamPerHariContainer">
-                        <!-- diisi renderBatasJamPerHariInputs() -->
-                    </div>
-                    <p id="infoBatasJamPerHari" class="text-xs mt-2 text-gray-500">Belum ada batas.</p>
-                    <p class="text-xs text-amber-700 mt-1">
-                        Isi JP maksimal tiap hari. Jam mengajar di atas batas <strong>tidak dihitung sebagai JP</strong>,
-                        jadi tidak muncul sebagai Absen dan tidak menurunkan Prosentase. Kosongkan kolom hari yang tidak dibatasi.
+                    <p class="text-xs text-amber-700 mt-2">
+                        Contoh: Jumlah Kolom <strong>10</strong>, batas <strong>7</strong> &rarr; tabel hanya menampilkan
+                        <strong>Jam ke-1 s.d. 7</strong>. Jam selebihnya tidak dihitung sebagai JP dan tidak menjadi Absen.
                     </p>
                 </div>
 
@@ -7426,47 +7432,61 @@
             return Math.max(1, Math.min(24, Number.isFinite(nilai) ? nilai : 6));
         }
 
-        // ============ BATAS JAM PELAJARAN PER HARI ============
-        // Kebijakan sekolah: tiap hari punya JP maksimal. Jam mengajar guru yang
-        // melebihi batas TIDAK dihitung sebagai JP, sehingga tidak muncul sebagai
-        // "Absen" dan tidak menurunkan prosentase kehadiran.
-        // Contoh: jadwal Senin 10 JP, batas Senin 7 JP -> target Senin = 7 JP.
-        // Nilai 0 / kosong berarti TANPA BATAS (perilaku lama, aman untuk data lama).
-        // Disimpan global (bukan per tahun ajaran) karena sifatnya kebijakan sekolah,
-        // sama seperti pengaturan "Jumlah Kolom Jam ke-".
-        const BATAS_JAM_HARI = { 1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: 'Jumat', 6: 'Sabtu' };
-        const BATAS_JAM_KEY = 'batasJamPerHariGlobal';
-        let batasJamPerHariCache = null;
+        // ============ BATAS JAM YANG DITAMPILKAN (SATU ISIAN GLOBAL) ============
+        // Satu angka untuk SEMUA hari, diisi di modal Input Kehadiran tepat di bawah
+        // "Jumlah Kolom Jam ke- (Global)".
+        // Contoh: jumlah kolom 10, batas 7 -> tabel hanya menampilkan Jam ke-1 s.d. 7.
+        // Jam mengajar di atas batas tidak dihitung sebagai JP, tidak menjadi Absen,
+        // dan hari yang sudah mencapai batas dianggap penuh.
+        // Kosong / 0 = tanpa batas (perilaku lama, aman untuk data lama).
+        const BATAS_JAM_KEY = 'batasJamTampilGlobal';
+        const BATAS_JAM_KEY_LAMA = 'batasJamPerHariGlobal'; // setelan lama (per hari)
+        let batasJamTampilCache = null;
 
-        function getBatasJamPerHari() {
-            if (batasJamPerHariCache) return batasJamPerHariCache;
-            let peta = {};
-            try {
-                const mentah = JSON.parse(localStorage.getItem(BATAS_JAM_KEY) || '{}');
-                if (mentah && typeof mentah === 'object') peta = mentah;
-            } catch (e) {
-                peta = {};
+        function getBatasJamTampil() {
+            if (batasJamTampilCache !== null) return batasJamTampilCache;
+
+            let nilai = 0;
+            const mentah = localStorage.getItem(BATAS_JAM_KEY);
+            if (mentah !== null) {
+                const angka = parseInt(mentah, 10);
+                nilai = Number.isFinite(angka) && angka > 0 ? Math.min(24, angka) : 0;
+            } else {
+                // Migrasi sekali dari setelan lama (batas per hari): pakai nilai yang
+                // paling sering dipakai agar pengguna tidak perlu mengetik ulang.
+                try {
+                    const lama = JSON.parse(localStorage.getItem(BATAS_JAM_KEY_LAMA) || '{}');
+                    const daftar = Object.values(lama || {})
+                        .map(v => parseInt(v, 10))
+                        .filter(n => Number.isFinite(n) && n > 0);
+                    if (daftar.length) {
+                        const hitung = {};
+                        daftar.forEach(n => { hitung[n] = (hitung[n] || 0) + 1; });
+                        nilai = Number(Object.keys(hitung)
+                            .sort((a, b) => (hitung[b] - hitung[a]) || (Number(a) - Number(b)))[0]);
+                    }
+                } catch (e) { nilai = 0; }
             }
-            batasJamPerHariCache = peta;
-            return peta;
+            batasJamTampilCache = nilai;
+            return nilai;
         }
 
-        function setBatasJamPerHari(peta) {
-            batasJamPerHariCache = peta && typeof peta === 'object' ? peta : {};
-            localStorage.setItem(BATAS_JAM_KEY, JSON.stringify(batasJamPerHariCache));
+        function setBatasJamTampil(nilai) {
+            const angka = parseInt(nilai, 10);
+            batasJamTampilCache = Number.isFinite(angka) && angka > 0 ? Math.min(24, angka) : 0;
+            localStorage.setItem(BATAS_JAM_KEY, String(batasJamTampilCache));
         }
 
-        // Batas JP untuk satu hari (0 = tanpa batas).
+        // Batas yang berlaku untuk semua hari. Parameter hari dipertahankan agar
+        // pemanggil lama (rekap, cetak, alasan izin) tetap bekerja tanpa diubah.
         function getBatasJamHari(hari) {
-            const nilai = Number(getBatasJamPerHari()[hari]);
-            if (!Number.isFinite(nilai) || nilai <= 0) return 0;
-            return Math.min(24, Math.floor(nilai));
+            return getBatasJamTampil();
         }
 
-        // Potong jumlah JP sesuai batas hari tersebut (tanpa batas -> nilai asli).
+        // Potong jumlah JP sesuai batas (tanpa batas -> nilai asli).
         function terapkanBatasJamHari(jam, hari) {
             const nilai = Number(jam) || 0;
-            const batas = getBatasJamHari(hari);
+            const batas = getBatasJamTampil();
             if (batas <= 0) return nilai;
             return Math.min(nilai, batas);
         }
@@ -7476,66 +7496,62 @@
             return terapkanBatasJamHari(getJamJadwalHarian(guru, hari), hari);
         }
 
-        // Ringkasan singkat untuk ditampilkan di modal, mis. "Senin 7 · Selasa 5".
-        function getRingkasanBatasJam() {
-            const peta = getBatasJamPerHari();
-            const hasil = Object.keys(BATAS_JAM_HARI)
-                .map(Number)
-                .filter(hari => Number(peta[hari]) > 0)
-                .map(hari => `${BATAS_JAM_HARI[hari]} ${getBatasJamHari(hari)}`);
-            return hasil.length ? hasil.join(' · ') : '';
+        // Jumlah kolom Jam ke- yang benar-benar DITAMPILKAN.
+        // Batas tidak pernah menambah kolom: kalau batas > jumlah kolom, dipakai jumlah kolom.
+        function getJumlahKolomTampil() {
+            const kolom = getJumlahKolomKehadiran();
+            const batas = getBatasJamTampil();
+            if (batas <= 0) return kolom;
+            return Math.max(1, Math.min(kolom, batas));
         }
 
-        function renderBatasJamPerHariInputs() {
-            const container = document.getElementById('batasJamPerHariContainer');
-            if (!container) return;
-            container.innerHTML = Object.entries(BATAS_JAM_HARI).map(([hari, nama]) => {
-                const batas = getBatasJamHari(Number(hari));
-                return `<div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">${nama}</label>
-                    <input type="number" id="batasJamHari${hari}" min="0" max="24" step="1"
-                        value="${batas > 0 ? batas : ''}" placeholder="tanpa batas"
-                        onchange="simpanBatasJamPerHariDariForm()"
-                        class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm">
-                </div>`;
-            }).join('');
-            perbaruiInfoBatasJam();
+        function renderBatasJamTampilInput() {
+            const input = document.getElementById('batasJamTampil');
+            if (!input) return;
+            const batas = getBatasJamTampil();
+            input.value = batas > 0 ? batas : '';
+            perbaruiInfoBatasJamTampil();
         }
 
-        function perbaruiInfoBatasJam() {
-            const info = document.getElementById('infoBatasJamPerHari');
+        function perbaruiInfoBatasJamTampil() {
+            const info = document.getElementById('infoBatasJamTampil');
             if (!info) return;
-            const ringkasan = getRingkasanBatasJam();
-            info.textContent = ringkasan
-                ? `Batas aktif — ${ringkasan}. Jam di atas batas tidak dihitung sebagai JP.`
-                : 'Belum ada batas. Jam mengajar mengikuti jadwal penuh.';
-            info.className = `text-xs mt-2 ${ringkasan ? 'text-amber-800 font-medium' : 'text-gray-500'}`;
+            const batas = getBatasJamTampil();
+            const kolom = getJumlahKolomKehadiran();
+            if (batas > 0) {
+                const tampil = getJumlahKolomTampil();
+                info.textContent = batas > kolom
+                    ? `Batas ${batas} JP — lebih besar dari jumlah kolom (${kolom}), jadi semua kolom tetap ditampilkan.`
+                    : `Menampilkan Jam ke-1 s.d. ${tampil} saja. Jam selebihnya tidak dihitung sebagai JP dan tidak menjadi Absen.`;
+            } else {
+                info.textContent = 'Kosong = tanpa batas. Semua kolom Jam ke- ditampilkan.';
+            }
+            info.className = `text-xs mt-1 ${batas > 0 ? 'text-amber-800 font-medium' : 'text-gray-500'}`;
         }
 
-        function simpanBatasJamPerHariDariForm() {
-            const peta = {};
-            Object.keys(BATAS_JAM_HARI).forEach(hari => {
-                const input = document.getElementById(`batasJamHari${hari}`);
-                if (!input) return;
-                const nilai = parseInt(input.value, 10);
-                if (Number.isFinite(nilai) && nilai > 0) peta[hari] = Math.min(24, nilai);
-            });
-            setBatasJamPerHari(peta);
-            renderBatasJamPerHariInputs();
+        function simpanBatasJamTampilDariForm() {
+            const input = document.getElementById('batasJamTampil');
+            if (!input) return;
+            setBatasJamTampil(input.value);
+            renderBatasJamTampilInput();
             sesuaikanKolomJamDenganTargetGuru();
             const mode = document.getElementById('kehadiranMode').value;
             if (mode === 'massal') renderInputKehadiranMassal();
             else renderInputKehadiranIndividu();
+            const batas = getBatasJamTampil();
+            showToast(batas > 0
+                ? `Batas jam ditampilkan: ${getJumlahKolomTampil()} jam pertama.`
+                : 'Batas jam dikosongkan (tanpa batas).');
         }
 
-        function kosongkanBatasJamPerHari() {
-            setBatasJamPerHari({});
-            renderBatasJamPerHariInputs();
+        function kosongkanBatasJamTampil() {
+            setBatasJamTampil('');
+            renderBatasJamTampilInput();
             sesuaikanKolomJamDenganTargetGuru();
             const mode = document.getElementById('kehadiranMode').value;
             if (mode === 'massal') renderInputKehadiranMassal();
             else renderInputKehadiranIndividu();
-            showToast('Batas jam per hari dikosongkan (tanpa batas).');
+            showToast('Batas jam dikosongkan (tanpa batas).');
         }
 
         // Pastikan kolom global minimal mencukupi target JP guru pada tanggal terpilih.
@@ -7589,9 +7605,10 @@
             const jamKe = getJamKeMengajarGuru(guru, tanggal);
             if (jamKe.length === 0) return getSlotJamGuru(target, jumlahKolom);
 
-            // Jam ke- yang melewati batas JP hari itu tidak aktif (tidak bisa dicentang),
-            // sehingga sisa jam di luar batas tidak pernah terhitung sebagai JP.
-            const batasHari = tanggal ? getBatasJamHari(new Date(tanggal + 'T00:00:00').getDay()) : 0;
+            // Jam ke- yang melewati batas tidak aktif (tidak bisa dicentang), sehingga
+            // sisa jam di luar batas tidak pernah terhitung sebagai JP. Batasnya satu
+            // angka untuk semua hari.
+            const batasHari = getBatasJamTampil();
             return Array.from({ length: jumlahKolom }, (_, index) => {
                 const nomor = index + 1;
                 const dalamBatas = batasHari <= 0 || nomor <= batasHari;
@@ -7879,10 +7896,11 @@
             document.getElementById('kehadiranJumlahKolom').value = Math.min(24, jumlahKolom);
             document.getElementById('kehadiranTanggal').value = getTodayLocal();
             document.getElementById('kehadiranJumlah').value = 0;
-            renderBatasJamPerHariInputs();
+            renderBatasJamTampilInput();
             // Kolom Jam ke- langsung mengikuti target hari ini (sudah dipotong batas),
             // supaya kolom kosong di atas batas tidak ikut ditampilkan.
             sesuaikanKolomJamDenganTargetGuru();
+            perbaruiInfoBatasJamTampil();
             isiDropdownKeteranganIjin('');
 
             if (id) {
@@ -7997,7 +8015,7 @@
 
             const guru = dataGuru.find(g => g.id === guruId);
             const target = getTargetJamGuruTanggal(guru, tanggal);
-            const jumlahKolom = getJumlahKolomKehadiran();
+            const jumlahKolom = getJumlahKolomTampil();
             const existing = recordEdit || getKehadiranNonPiket(guruId, tanggal);
             const jumlahAwal = existing ? Number(existing.jumlah) || 0 : 0;
             const slots = getSlotJamDenganReferensi(guru, target, jumlahKolom, tanggal);
@@ -8043,7 +8061,7 @@
 
         function renderInputKehadiranMassal() {
             const tanggal = document.getElementById('kehadiranTanggal').value;
-            const jumlahKolom = getJumlahKolomKehadiran();
+            const jumlahKolom = getJumlahKolomTampil();
             const thead = document.getElementById('theadInputKehadiranMassal');
             const tbody = document.getElementById('tbodyInputKehadiranMassal');
 
