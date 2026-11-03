@@ -201,8 +201,15 @@ Aturan kerjanya:
 
 - Target harian guru = `min(jadwal JP, batas hari itu)`. Batas adalah **maksimum**,
   jadi guru dengan jadwal 6 JP tetap 6 JP walau batasnya 7.
-- Jam ke- di atas batas **tidak bisa dicentang** dan tidak muncul sebagai Absen,
-  sehingga Prosentase tetap 100% (contoh: jadwal 10 JP, batas 7, hadir 7 → 100%).
+- Jam ke- di atas batas **tidak bisa dicentang**.
+- **Kehadiran juga dipotong sebatas batas.** Bila tercatat 10 JP padahal batas 7,
+  yang dihitung tetap 7 JP — sisa 3 JP tidak masuk ke Jml Hadir, Total, honor per jam
+  rekap, maupun cetakan.
+- Hari yang sudah mencapai batas dianggap **penuh**, sehingga tidak ada kekurangan
+  target: **Jml Absen dikosongkan** (tampil "-") di daftar layar dan di Cetak
+  Kehadiran Guru, bukan 0. Absen hanya terisi bila kehadiran benar-benar kurang
+  (contoh: batas 7, hadir 5 → Absen 2).
+- Prosentase tetap 100% untuk hari yang penuh.
 - Berlaku juga untuk rekap, cetak Cetak Kehadiran Guru, alasan ijin, dan generate
   kehadiran dari jadwal.
 - Disimpan global di `localStorage` (`batasJamPerHariGlobal`), bukan per tahun ajaran,
