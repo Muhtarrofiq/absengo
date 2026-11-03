@@ -136,6 +136,71 @@ console.log('\n-- 5. Rekap: sisa jam tidak dihitung sebagai Absen --');
 }
 
 // ---------------------------------------------------------------------------
+console.log('\n-- 5b. Hadir MELEBIHI batas: dipotong & Absen kosong --');
+{
+  // Hadir 10 JP padahal batas Senin 7 -> dianggap penuh, sisa 3 JP tidak masuk laporan.
+  ev(`setBatasJamPerHari({ '1': 7 })`);
+  ev(`dataKehadiran = [{ id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:10, keterangan:'' }]`);
+  ev(`taSet('dataKehadiran', dataKehadiran)`);
+
+  const r = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${SENIN}'])`);
+  check('hadir dipotong jadi 7 JP (bukan 10)', r.jumlahHadir === 7, String(r.jumlahHadir));
+  check('absen 0 JP (tidak ada kekurangan)', r.jumlahAbsen === 0, String(r.jumlahAbsen));
+  check('total = 7 JP', r.jumlahTotal === 7, String(r.jumlahTotal));
+  check('target = 7 JP', r.totalJamJadwal === 7, String(r.totalJamJadwal));
+
+  const baris = ev(`getDataRekapKehadiranGuru(11, 2026).find(x => x.guruId === 'g1')`);
+  check('rekap: prosentase 100%', Math.round(baris.prosentase) === 100, String(baris.prosentase));
+  check('rekap: absen 0', baris.absen === 0, String(baris.absen));
+  check('rekap: kehadiran 7 (sisa 3 JP tidak masuk)', baris.kehadiran === 7, String(baris.kehadiran));
+
+  // Daftar layar: Jml Absen tampil kosong ("-"), bukan 0.
+  ev(`document.getElementById('filterKehadiranDari').value = '${SENIN}'`);
+  ev(`document.getElementById('filterKehadiranSampai').value = '2026-11-06'`);
+  ev(`renderTabelKehadiran()`);
+  await sleep(120);
+  const selAbsen = ev(`(function(){
+    const th = [...document.querySelectorAll('#theadKehadiran th')].find(t => /Jml Absen/i.test(t.textContent));
+    if (!th) return 'kolom-tidak-ada';
+    const idx = [...th.parentNode.children].indexOf(th);
+    const baris = document.querySelector('#tabelKehadiran tr');
+    return baris ? baris.children[idx].textContent.trim() : 'baris-tidak-ada';
+  })()`);
+  check('daftar layar: Jml Absen kosong ("-")', selAbsen === '-', JSON.stringify(selAbsen));
+
+  // Cetak: sel Absen kosong, bukan 0.
+  ev(`document.getElementById('printRekapArea').innerHTML = ''`);
+  ev(`document.getElementById('rekapBulan').value = '11'`);
+  ev(`document.getElementById('rekapTahun').value = '2026'`);
+  ev(`cetakRekapKehadiranGuru()`);
+  await sleep(150);
+  const isi = ev(`document.getElementById('printRekapArea').innerHTML`);
+  const d = new (await import('jsdom')).JSDOM(isi);
+  const sel = [...d.window.document.querySelectorAll('table.data-kehadiran tbody tr')][0];
+  check('cetak: baris guru ada', !!sel);
+  if (sel) {
+    const tds = [...sel.querySelectorAll('td')];
+    const idxAbsen = [...d.window.document.querySelectorAll('table.data-kehadiran thead th')]
+      .findIndex(th => /Absen/i.test(th.textContent));
+    check('cetak: kolom Absen kosong', tds[idxAbsen] && tds[idxAbsen].textContent.trim() === '',
+      JSON.stringify(tds[idxAbsen]?.textContent));
+    const idxHadir = [...d.window.document.querySelectorAll('table.data-kehadiran thead th')]
+      .findIndex(th => /^Kehadiran/i.test(th.textContent.trim()));
+    check('cetak: kolom Kehadiran 7', tds[idxHadir] && tds[idxHadir].textContent.trim() === '7',
+      JSON.stringify(tds[idxHadir]?.textContent));
+  }
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n-- 5c. Kurang dari batas tetap dihitung Absen --');
+{
+  ev(`dataKehadiran = [{ id:'k1', guruId:'g1', tanggal:'${SENIN}', jumlah:5, keterangan:'' }]`);
+  const r = ev(`hitungRingkasanJamKehadiran(dataGuru[0], ['${SENIN}'])`);
+  check('hadir 5 JP', r.jumlahHadir === 5, String(r.jumlahHadir));
+  check('absen 2 JP (7 - 5)', r.jumlahAbsen === 2, String(r.jumlahAbsen));
+}
+
+// ---------------------------------------------------------------------------
 console.log('\n-- 6. Tampilan Input Massal mengikuti batas --');
 {
   ev(`openModalKehadiranMassal()`);

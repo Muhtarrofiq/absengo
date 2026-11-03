@@ -5166,7 +5166,13 @@
 
                 const hari = tanggalObj.getDay();
                 const jadwalHariIni = getJamJadwalHarianEfektif(guru, hari);
-                const hadirHariIni = jamAktualPerTanggal[tanggal] || 0;
+                const hadirMentah = jamAktualPerTanggal[tanggal] || 0;
+                // Jam mengajar yang MELEBIHI batas hari itu tidak dimasukkan ke laporan:
+                // kehadiran dihitung maksimal sebatas batas. Karena target juga sudah
+                // dipotong, hari tersebut dianggap PENUH sehingga tidak ada kekurangan
+                // target (Jml Absen kosong). Tanpa batas -> nilai apa adanya (perilaku lama).
+                const batasHariIni = getBatasJamHari(hari);
+                const hadirHariIni = batasHariIni > 0 ? Math.min(hadirMentah, batasHariIni) : hadirMentah;
                 jumlahHadir += hadirHariIni;
 
                 // Target jam dan Jml Absen HANYA dihitung pada tanggal yang muncul datanya (hadirHariIni > 0 atau tercatat di data kehadiran)
@@ -5638,10 +5644,13 @@
                 const tanggalObj = new Date(tanggal + 'T00:00:00');
                 const targetJam = getJamJadwalHarianEfektif(guru, tanggalObj.getDay());
                 const records = recordPerTanggal[tanggal] || [];
-                const jamTercatat = records.reduce((total, record) => {
+                const jamTercatatMentah = records.reduce((total, record) => {
                     const jam = Number(record.jumlah);
                     return total + (Number.isFinite(jam) && jam > 0 ? jam : 0);
                 }, 0);
+                // Jam di atas batas tidak dianggap kekurangan, sama seperti ringkasan.
+                const batasHariIni = getBatasJamHari(tanggalObj.getDay());
+                const jamTercatat = batasHariIni > 0 ? Math.min(jamTercatatMentah, batasHariIni) : jamTercatatMentah;
 
                 // Alasan izin hanya relevan bila terdapat kekurangan dari jam terjadwal.
                 if (targetJam <= 0 || jamTercatat >= targetJam) return;
@@ -5984,7 +5993,7 @@
                                     <td class="center">${formatNumber(row.jamMengajar || 0)}</td>
                                     <td class="center"><strong>${formatNumber(row.jamTarget || 0)}</strong></td>
                                     <td class="right" style="${styleKehadiran}">${formatNumber(row.kehadiran)}</td>
-                                    <td class="right">${formatNumber(row.absen)}</td>
+                                    <td class="right">${row.absen > 0 ? formatNumber(row.absen) : ''}</td>
                                     <td class="right"><strong>${formatNumber(row.total)}</strong></td>
                                     <td class="center">${row.absen === 0 ? '100%' : formatPersentaseKehadiran(row.prosentase)}</td>
                                     ${selKet}
@@ -5998,7 +6007,7 @@
                                 <td class="center">${formatNumber(totalJamMengajarGlobal)}</td>
                                 <td class="center">${formatNumber(dataKehadiranRekap.reduce((s, r) => s + (r.jamTarget || 0), 0))}</td>
                                 <td class="right">${formatNumber(totalKehadiran)}</td>
-                                <td class="right">${formatNumber(totalAbsen)}</td>
+                                <td class="right">${totalAbsen > 0 ? formatNumber(totalAbsen) : ''}</td>
                                 <td class="right">${formatNumber(totalEfektif)}</td>
                                 <td class="center">${totalAbsen === 0 ? '100%' : formatPersentaseKehadiran(prosentaseTotal)}</td>
                                 ${daftarKeteranganCetak.map(kat => {
@@ -8786,7 +8795,9 @@
                 rowHtml += `<td class="px-3 py-3 text-center font-semibold bg-green-50 text-green-800">${hariAktifGlobal}</td>`;
                 rowHtml += `<td class="px-3 py-3 text-center font-semibold bg-purple-50 text-purple-800">${ringkasanJam.totalJamJadwal}</td>`;
                 rowHtml += `<td class="px-3 py-3 text-center font-semibold ${warnaSummaryHadir}">${ringkasanJam.jumlahHadir}</td>`;
-                rowHtml += `<td class="px-3 py-3 text-center font-semibold bg-red-50 text-red-700">${ringkasanJam.jumlahAbsen}</td>`;
+                // Jml Absen dikosongkan bila tidak ada kekurangan (hari sudah penuh / dibatasi).
+                const teksAbsen = ringkasanJam.jumlahAbsen > 0 ? ringkasanJam.jumlahAbsen : '-';
+                rowHtml += `<td class="px-3 py-3 text-center font-semibold bg-red-50 text-red-700">${teksAbsen}</td>`;
                 rowHtml += `<td class="px-3 py-3 text-center">
                     <div class="flex justify-center gap-1">
                         <button onclick="tambahKehadiranGuru('${g.id}')" class="text-green-600 hover:text-green-800 text-xs" title="Tambah/Edit">
