@@ -1231,6 +1231,9 @@
                     <button onclick="window.__cetakSafe('cetakRekapKehadiranGuru')" class="bg-orange-600 hover:bg-orange-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm flex items-center gap-1.5" title="Cetak rekap kehadiran guru bulan yang dipilih">
                         <i class="fas fa-user-check"></i> Cetak Kehadiran Guru
                     </button>
+                    <button onclick="bukaEditorKeteranganIjin()" class="bg-slate-600 hover:bg-slate-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm flex items-center gap-1.5" title="Atur kolom keterangan (Ijin, Sakit, dll) yang tampil di Cetak Kehadiran Guru">
+                        <i class="fas fa-list-ul"></i> Kelola Keterangan
+                    </button>
                     <button onclick="window.__cetakSafe('cetakLegerTahunan')" class="bg-teal-600 hover:bg-teal-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm flex items-center gap-1.5" title="Cetak leger gaji Januari–Desember">
                         <i class="fas fa-calendar-alt"></i> Cetak Leger 1 Tahun
                     </button>
@@ -1989,7 +1992,9 @@
             </div>
             <div class="p-6 space-y-4">
                 <div class="bg-indigo-50 border-l-4 border-indigo-500 p-3 text-xs text-indigo-900 rounded">
-                    <i class="fas fa-info-circle"></i> Daftar ini muncul sebagai pilihan dropdown pada input kehadiran guru. Boleh ditambah, diubah, atau dihapus sesuai kebutuhan sekolah.
+                    <i class="fas fa-info-circle"></i> Daftar ini menjadi <strong>kolom keterangan pada Cetak Kehadiran Guru</strong> dan pilihan dropdown input kehadiran.
+                    <br><span class="block mt-1">• Klik nama lalu ubah teksnya untuk <strong>ganti nama</strong> (data kehadiran lama ikut disesuaikan).
+                    • Gunakan ▲▼ untuk <strong>mengatur urutan kolom</strong> saat dicetak.</span>
                 </div>
                 <div class="flex gap-2">
                     <input type="text" id="inputKeteranganIjinBaru" class="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" placeholder="Tulis keterangan baru, misal: Alpa, Sakit, Tugas Dinas..." onkeydown="if(event.key==='Enter'){event.preventDefault();tambahKeteranganIjin();}">
@@ -2003,6 +2008,7 @@
                             <tr>
                                 <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase w-12">No</th>
                                 <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Keterangan</th>
+                                <th class="px-3 py-2 text-right text-xs font-semibold text-gray-600 uppercase w-32">Aksi</th>
                             </tr>
                         </thead>
                         <tbody id="bodyKeteranganIjin" class="divide-y divide-gray-200"></tbody>
@@ -7541,22 +7547,95 @@
             if (!tbody) return;
             const daftar = getDaftarKeteranganIjin();
             if (!daftar.length) {
-                tbody.innerHTML = '<tr><td colspan="2" class="px-3 py-4 text-center text-gray-500">Belum ada daftar. Tambahkan keterangan pada kolom di bawah lalu klik <strong>Tambah</strong>.</td></tr>';
-            } else {
-                tbody.innerHTML = daftar.map((item, idx) => `
+                tbody.innerHTML = '<tr><td colspan="3" class="px-3 py-4 text-center text-gray-500">Belum ada daftar. Tambahkan keterangan pada kolom di bawah lalu klik <strong>Tambah</strong>.</td></tr>';
+                return;
+            }
+            const tombol = (aksi, judul, ikon, kelas, nonaktif = false) => `
+                                <button type="button" onclick="${aksi}" ${nonaktif ? 'disabled' : ''}
+                                    class="w-7 h-7 rounded border ${nonaktif ? 'opacity-30 cursor-not-allowed border-gray-200 text-gray-400' : kelas}"
+                                    title="${judul}"><i class="fas ${ikon}"></i></button>`;
+            tbody.innerHTML = daftar.map((item, idx) => `
                     <tr class="hover:bg-gray-50">
                         <td class="px-3 py-2 text-center text-sm text-gray-500">${idx + 1}</td>
-                        <td class="px-3 py-2 text-sm">
-                            <div class="flex items-center gap-2">
-                                <span class="flex-1">${escapeHtml(item)}</span>
-                                <button type="button" onclick="hapusKeteranganIjin(${idx})" class="text-red-600 hover:text-red-800 text-xs" title="Hapus">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                        <td class="px-2 py-2 text-sm">
+                            <input type="text" id="ketIjinBaris${idx}" value="${escapeAttr(item)}"
+                                class="w-full px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-indigo-500"
+                                onblur="gantiNamaKeteranganIjin(${idx}, { tanpaRender: true })"
+                                onkeydown="if(event.key==='Enter'){event.preventDefault();gantiNamaKeteranganIjin(${idx});}">
+                        </td>
+                        <td class="px-2 py-2">
+                            <div class="flex items-center justify-end gap-1">
+                                ${tombol(`geserKeteranganIjin(${idx}, -1)`, 'Naikkan (urutan kolom cetak)', 'fa-arrow-up', 'border-blue-200 text-blue-700 hover:bg-blue-50', idx === 0)}
+                                ${tombol(`geserKeteranganIjin(${idx}, 1)`, 'Turunkan (urutan kolom cetak)', 'fa-arrow-down', 'border-blue-200 text-blue-700 hover:bg-blue-50', idx === daftar.length - 1)}
+                                ${tombol(`gantiNamaKeteranganIjin(${idx})`, 'Simpan nama baru', 'fa-check', 'border-green-200 text-green-700 hover:bg-green-50')}
+                                ${tombol(`hapusKeteranganIjin(${idx})`, 'Hapus', 'fa-trash', 'border-red-200 text-red-600 hover:bg-red-50')}
                             </div>
                         </td>
                     </tr>
                 `).join('');
+        }
+
+        // Ganti satu catatan kehadiran dari nama kategori lama ke nama baru.
+        // Dipakai saat kategori di-rename, supaya rekap & cetakan tidak memunculkan
+        // kolom lama yang kosong di samping kolom baru.
+        function gantiKeteranganPadaDataKehadiran(namaLama, namaBaru) {
+            if (typeof dataKehadiran === 'undefined' || !Array.isArray(dataKehadiran)) return 0;
+            let jumlah = 0;
+            dataKehadiran.forEach(k => {
+                if (String(k.keterangan || '').trim() === namaLama) {
+                    k.keterangan = namaBaru;
+                    jumlah++;
+                }
+            });
+            if (jumlah > 0) taSet('dataKehadiran', dataKehadiran);
+            return jumlah;
+        }
+
+        // Simpan nama hasil edit pada satu baris. `opsi.tanpaRender` dipakai saat
+        // dipicu blur agar elemen input tidak diganti (fokus & klik tombol aman).
+        function gantiNamaKeteranganIjin(index, opsi = {}) {
+            const daftar = getDaftarKeteranganIjin();
+            if (index < 0 || index >= daftar.length) return;
+            const input = document.getElementById(`ketIjinBaris${index}`);
+            if (!input) return;
+            const namaLama = daftar[index];
+            const nilaiBaru = String(input.value || '').trim().replace(/\s+/g, ' ');
+            const tanpaRender = !!(opsi && opsi.tanpaRender === true);
+            if (!nilaiBaru) {
+                showToast('Nama keterangan tidak boleh kosong!', 'error');
+                input.value = namaLama;
+                return;
             }
+            if (nilaiBaru === namaLama) return;
+            if (daftar.some((item, i) => i !== index && item.toLowerCase() === nilaiBaru.toLowerCase())) {
+                showToast(`"${nilaiBaru}" sudah ada di daftar!`, 'error');
+                input.value = namaLama;
+                return;
+            }
+            const jumlahTerdampak = gantiKeteranganPadaDataKehadiran(namaLama, nilaiBaru);
+            daftar[index] = nilaiBaru;
+            simpanDaftarKeteranganIjin(daftar);
+            // Saat dipicu blur, jangan render ulang: render ulang akan mengganti
+            // elemen input sehingga fokus hilang dan klik tombol bisa gagal.
+            if (tanpaRender) {
+                input.value = nilaiBaru;
+            } else {
+                renderDaftarKeteranganIjin();
+            }
+            showToast(jumlahTerdampak > 0
+                ? `Keterangan diubah menjadi "${nilaiBaru}". ${jumlahTerdampak} catatan kehadiran ikut diperbarui.`
+                : `Keterangan diubah menjadi "${nilaiBaru}".`);
+        }
+
+        // Urutan daftar = urutan kolom pada cetak rekap kehadiran guru.
+        function geserKeteranganIjin(index, arah) {
+            const daftar = getDaftarKeteranganIjin();
+            const target = index + arah;
+            if (index < 0 || index >= daftar.length || target < 0 || target >= daftar.length) return;
+            [daftar[index], daftar[target]] = [daftar[target], daftar[index]];
+            simpanDaftarKeteranganIjin(daftar);
+            renderDaftarKeteranganIjin();
+            showToast('Urutan keterangan disimpan.');
         }
 
         function tambahKeteranganIjin() {
@@ -7580,11 +7659,21 @@
             const daftar = getDaftarKeteranganIjin();
             if (index < 0 || index >= daftar.length) return;
             const nama = daftar[index];
-            if (!confirm(`Hapus keterangan "${nama}" dari daftar?`)) return;
+            const dipakai = (typeof dataKehadiran !== 'undefined' && Array.isArray(dataKehadiran))
+                ? dataKehadiran.filter(k => String(k.keterangan || '').trim() === nama).length
+                : 0;
+            // Catatan kehadiran TIDAK ikut dihapus. Beri tahu pengguna bahwa kolomnya
+            // masih akan tercetak selama masih ada catatan yang memakai nama tersebut.
+            const pesan = dipakai > 0
+                ? `Hapus "${nama}" dari daftar?\n\nMasih ada ${dipakai} catatan kehadiran yang memakai keterangan ini. Catatannya tidak dihapus, dan kolomnya tetap tercetak sampai keterangan catatan tersebut diubah.`
+                : `Hapus keterangan "${nama}" dari daftar?`;
+            if (!confirm(pesan)) return;
             daftar.splice(index, 1);
             simpanDaftarKeteranganIjin(daftar);
             renderDaftarKeteranganIjin();
-            showToast('Keterangan dihapus.');
+            showToast(dipakai > 0
+                ? `Keterangan dihapus. ${dipakai} catatan lama masih memakai nama ini.`
+                : 'Keterangan dihapus.');
         }
 
         function resetKeteranganIjinKeDefault() {

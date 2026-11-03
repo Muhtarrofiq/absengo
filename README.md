@@ -190,7 +190,31 @@ Uji tata letak cetak (jsdom):
 npm install --no-save jsdom
 npm run test:print         # Cetak Kehadiran Guru: lebar kolom & orientasi kertas
 npm run test:print-shadow  # bayangan kepala kolom tabel di SEMUA tampilan cetak
+npm run test:keterangan    # kelola kolom keterangan (ganti nama, urutan, hapus)
 ```
+
+### Mengatur kolom keterangan (Ijin, Sakit, dll)
+
+Kolom keterangan pada **Cetak Kehadiran Guru** diambil dari daftar `keteranganIjinList`.
+Daftar ini bisa diubah dari dua tempat:
+
+- **Rekap Bulanan** → tombol **Kelola Keterangan** (di samping tombol cetak)
+- **Input Kehadiran Guru** → tombol **Edit Daftar** di dekat pilihan Keterangan
+- atau ketik bebas saat memilih *Lainnya...* pada dropdown keterangan
+
+Yang bisa dilakukan di modal tersebut:
+
+| Aksi | Cara | Efek |
+|---|---|---|
+| Tambah | Isi kolom teks → **Tambah** | Menambah kolom baru di cetakan |
+| Ganti nama | Ubah teks pada baris → **Enter** / klik ✓ / klik di luar | Data kehadiran lama ikut diperbarui, jadi tidak muncul dua kolom (lama & baru) |
+| Atur urutan | Tombol ▲ ▼ | Urutan daftar = urutan kolom saat dicetak |
+| Hapus | Tombol 🗑 | Menghapus dari daftar; catatan kehadiran lama TIDAK dihapus |
+| Reset | **Reset ke Default** | Kembali ke Alpa, Sakit, Keperluan Keluarga, Tugas Dinas |
+
+Catatan: kategori yang masih dipakai catatan kehadiran lama tetap muncul sebagai kolom
+walaupun sudah dihapus dari daftar — ini disengaja agar data tidak hilang diam-diam.
+Ganti namanya (bukan hapus) bila ingin kolom itu menyatu dengan kategori lain.
 
 Pratinjau visual semua dokumen cetak (tanpa perlu data produksi):
 
