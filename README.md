@@ -99,8 +99,28 @@ Namun, key ikut tersimpan di kode — jadi:
 
 - Setiap perubahan data di browser → otomatis dikirim ke server → disimpan di Supabase.
 - Semua perangkat yang login akan **menarik data terbaru** (cek tiap ~15 detik + saat tab aktif).
-- Ada **deteksi konflik**: jika 2 perangkat mengubah data bersamaan, perangkat kedua
-  mendapat peringatan "ada perubahan dari perangkat lain" lalu memuat data terbaru.
+- **Tidak ada data yang dibuang saat dua perangkat mengubah bersamaan.** Jika perangkat lain
+  menulis lebih dulu (HTTP 409), data lokal **digabung tiga arah** (basis / perangkat ini /
+  server) lalu disimpan ulang:
+  - daftar (siswa, guru, kehadiran, absensi) digabung **per `id`** — tambahan kedua
+    perangkat sama-sama tersimpan, suntingan entri yang sama diambil yang berpenanda waktu
+    terbaru (jika ada), sisanya diutamakan versi perangkat yang sedang dipakai;
+  - penghapusan hanya dihormati bila entri tidak diubah di sisi lain;
+  - objek seperti `pengaturan` digabung per kolom, bukan ditimpa seluruhnya.
+- **Perubahan yang belum terkirim tidak pernah ditimpa** tarik data berkala: selama masih ada
+  perubahan tertunda, aplikasi mendorong dulu, baru menarik.
+- Tarik data otomatis **ditunda** saat pengguna sedang mengetik (input/textarea/select fokus
+  atau modal terbuka) supaya isian yang belum tersimpan tidak hilang.
+- Saat halaman ditutup / ponsel dikunci, perubahan terakhir dikirim memakai
+  `fetch(..., { keepalive: true })` agar tidak terpotong.
+- Bila koneksi/server gagal, data **tetap disimpan di perangkat**, status di sidebar berubah
+  menjadi *"Belum terkirim — menunggu koneksi"*, dan pengiriman diulang otomatis
+  (backoff 1→30 detik) hingga berhasil.
+- Sesi tidak dihapus hanya karena gangguan jaringan: kalau `auth/me` gagal karena jaringan,
+  aplikasi tetap masuk memakai sesi tersimpan dan mengirim data setelah online. Sesi hanya
+  dibuang bila server benar-benar menolak token (401/403).
+- Indikator status di sidebar: **Menyimpan… → Tersimpan di server** atau
+  **Belum terkirim — menunggu koneksi**.
 - Data dipisah per **Tahun Ajaran** (sama seperti di mode lokal).
 
 ## Akun & role
@@ -182,6 +202,13 @@ Uji skema SQL terhadap Postgres sungguhan (PGlite — WASM, tanpa server DB):
 ```bash
 npm install --no-save @electric-sql/pglite
 npm run test:schema      # instalasi baru, upgrade DB lama, idempotensi, constraint
+```
+
+Uji sinkronisasi lintas perangkat (dua "perangkat" jsdom sekaligus):
+
+```bash
+npm install --no-save jsdom
+npm run test:sinkron     # 47 cek: konflik 409, merge per id, offline, keepalive, sesi
 ```
 
 Uji batas jam per tanggal (jsdom):

@@ -83,6 +83,10 @@
                 <button onclick="logoutAplikasi()" class="text-blue-200 hover:text-white text-lg" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
             </div>
         </div>
+        <div id="statusSinkronBox" class="mx-4 mt-3 rounded-lg bg-blue-900/40 border border-blue-700 px-3 py-2 text-[11px] flex items-center gap-2 no-print">
+            <i id="statusSinkronIkon" class="fas fa-circle text-[9px] text-blue-200"></i>
+            <span id="statusSinkron" class="truncate text-blue-200">Memeriksa koneksi…</span>
+        </div>
         <nav class="p-4">
             <p class="text-blue-400 text-xs uppercase mb-2 px-4">Menu Utama</p>
             <ul class="space-y-1">
@@ -2561,9 +2565,216 @@
         let sinkronServerBerjalan = false;
         let sinkronServerPending = false;
         let timerTarikServer = null;
+        let snapshotServerTerakhir = null;   // state server terakhir yang diketahui (basis merge 3 arah)
+        let stateKotorServer = false;        // ada perubahan lokal yang belum terkirim
+        let statusSinkronServer = 'idle';
+        let percobaanSinkronServer = 0;
 
         function keyStateAplikasi(key) {
             return key.startsWith('ta_') || ['tahunAjaranList', 'tahunAjaranAktif', 'tahunAjaranKeterangan', 'masterJabatan', 'pengaturan', 'tataTertibSiswa_v1', '__migrated_ke_ta'].includes(key);
+        }
+
+        // ---------- Penggabungan tiga arah (basis / perangkat ini / server) ----------
+        function salinState(state) {
+            try { return JSON.parse(JSON.stringify(state || {})); } catch (e) { return {}; }
+        }
+
+        function nilaiStateSama(a, b) {
+            return JSON.stringify(a) === JSON.stringify(b);
+        }
+
+        function adalahObjekState(nilai) {
+            return !!nilai && typeof nilai === 'object' && !Array.isArray(nilai);
+        }
+
+        function parseNilaiState(teks) {
+            if (teks === undefined || teks === null) return { ok: false, nilai: null };
+            try { return { ok: true, nilai: JSON.parse(teks) }; } catch (e) { return { ok: false, nilai: null }; }
+        }
+
+        function kunciEntriState(entri) {
+            if (entri && typeof entri === 'object' && entri.id !== undefined && entri.id !== null && entri.id !== '') {
+                return 'id:' + String(entri.id);
+            }
+            return 'nilai:' + JSON.stringify(entri);
+        }
+
+        function indeksEntriState(daftar) {
+            const peta = new Map();
+            (Array.isArray(daftar) ? daftar : []).forEach(entri => peta.set(kunciEntriState(entri), entri));
+            return peta;
+        }
+
+        function penandaWaktuEntri(entri) {
+            if (!entri || typeof entri !== 'object') return 0;
+            const kolomWaktu = ['updatedAt', 'diubahPada', 'diperbaruiPada', 'timestamp', 'waktu'];
+            for (let i = 0; i < kolomWaktu.length; i++) {
+                const nilai = entri[kolomWaktu[i]];
+                if (!nilai) continue;
+                const waktu = typeof nilai === 'number' ? nilai : Date.parse(nilai);
+                if (Number.isFinite(waktu)) return waktu;
+            }
+            return 0;
+        }
+
+        function pilihEntriTerbaru(lokal, server) {
+            const waktuLokal = penandaWaktuEntri(lokal);
+            const waktuServer = penandaWaktuEntri(server);
+            if (waktuLokal && waktuServer && waktuLokal !== waktuServer) return waktuLokal > waktuServer ? lokal : server;
+            // Tanpa penanda waktu, perubahan di perangkat yang sedang dipakai diutamakan.
+            return lokal;
+        }
+
+        function gabungArrayTigaArah(basis, lokal, server) {
+            const petaBasis = indeksEntriState(basis);
+            const petaLokal = indeksEntriState(lokal);
+            const petaServer = indeksEntriState(server);
+            const urutan = [];
+            petaLokal.forEach((_, kunci) => urutan.push(kunci));
+            petaServer.forEach((_, kunci) => { if (!petaLokal.has(kunci)) urutan.push(kunci); });
+            const hasil = [];
+            urutan.forEach(kunci => {
+                const adaLokal = petaLokal.has(kunci);
+                const adaServer = petaServer.has(kunci);
+                const nLokal = petaLokal.get(kunci);
+                const nServer = petaServer.get(kunci);
+                const nBasis = petaBasis.has(kunci) ? petaBasis.get(kunci) : undefined;
+                if (!adaLokal) {
+                    // Tidak ada di perangkat ini. Data baru dari perangkat lain tetap
+                    // dipertahankan; penghapusan lokal hanya berlaku bila server tidak
+                    // mengubah entri tersebut sejak basis.
+                    if (adaServer && (nBasis === undefined || !nilaiStateSama(nServer, nBasis))) hasil.push(nServer);
+                    return;
+                }
+                if (!adaServer) {
+                    // Dihapus di perangkat lain: hidupkan hanya bila diubah di perangkat ini.
+                    if (nBasis === undefined || !nilaiStateSama(nLokal, nBasis)) hasil.push(nLokal);
+                    return;
+                }
+                if (nilaiStateSama(nLokal, nServer)) { hasil.push(nLokal); return; }
+                if (nBasis !== undefined && nilaiStateSama(nLokal, nBasis)) { hasil.push(nServer); return; }
+                if (nBasis !== undefined && nilaiStateSama(nServer, nBasis)) { hasil.push(nLokal); return; }
+                hasil.push(pilihEntriTerbaru(nLokal, nServer));
+            });
+            return hasil;
+        }
+
+        function gabungNilaiTigaArah(basis, lokal, server) {
+            if (nilaiStateSama(lokal, basis)) return server;
+            if (nilaiStateSama(server, basis)) return lokal;
+            if (nilaiStateSama(lokal, server)) return lokal;
+            if (Array.isArray(lokal) && Array.isArray(server)) {
+                return gabungArrayTigaArah(Array.isArray(basis) ? basis : [], lokal, server);
+            }
+            if (adalahObjekState(lokal) && adalahObjekState(server)) {
+                const dasar = adalahObjekState(basis) ? basis : {};
+                const hasil = {};
+                const semuaKunci = new Set(Object.keys(dasar).concat(Object.keys(lokal)).concat(Object.keys(server)));
+                semuaKunci.forEach(kunci => {
+                    const adaLokal = Object.prototype.hasOwnProperty.call(lokal, kunci);
+                    const adaServer = Object.prototype.hasOwnProperty.call(server, kunci);
+                    const nBasis = dasar[kunci];
+                    if (!adaLokal) { if (adaServer && !nilaiStateSama(server[kunci], nBasis)) hasil[kunci] = server[kunci]; return; }
+                    if (!adaServer) { if (!nilaiStateSama(lokal[kunci], nBasis)) hasil[kunci] = lokal[kunci]; return; }
+                    hasil[kunci] = gabungNilaiTigaArah(nBasis, lokal[kunci], server[kunci]);
+                });
+                return hasil;
+            }
+            return pilihEntriTerbaru(lokal, server);
+        }
+
+        function gabungStateTigaArah(basisState, stateLokal, stateServer) {
+            const basis = basisState || {};
+            const lokal = stateLokal || {};
+            const server = stateServer || {};
+            const hasil = {};
+            let jumlahDigabung = 0;
+            const semuaKunci = new Set(Object.keys(lokal).concat(Object.keys(server)).concat(Object.keys(basis)));
+            semuaKunci.forEach(kunciState => {
+                if (!keyStateAplikasi(kunciState)) return;
+                const teksLokal = lokal[kunciState];
+                const teksServer = server[kunciState];
+                if (teksLokal === undefined) {
+                    // Tidak ada di perangkat ini: hapus hanya jika sebelumnya memang
+                    // ada (dihapus pengguna). Kalau kuncinya belum pernah dikenal,
+                    // pakai versi server agar data tidak hilang.
+                    if (!Object.prototype.hasOwnProperty.call(basis, kunciState) && teksServer !== undefined) {
+                        hasil[kunciState] = teksServer;
+                    }
+                    return;
+                }
+                if (teksServer === undefined) { hasil[kunciState] = teksLokal; jumlahDigabung++; return; }
+                if (teksLokal === teksServer) { hasil[kunciState] = teksLokal; return; }
+                const nilaiLokal = parseNilaiState(teksLokal);
+                const nilaiServer = parseNilaiState(teksServer);
+                if (!nilaiLokal.ok || !nilaiServer.ok) { hasil[kunciState] = teksLokal; jumlahDigabung++; return; }
+                const nilaiBasis = parseNilaiState(basis[kunciState]);
+                const gabung = gabungNilaiTigaArah(nilaiBasis.ok ? nilaiBasis.nilai : null, nilaiLokal.nilai, nilaiServer.nilai);
+                const teksGabung = JSON.stringify(gabung);
+                hasil[kunciState] = teksGabung;
+                if (teksGabung !== teksServer) jumlahDigabung++;
+            });
+            return { state: hasil, jumlahDigabung };
+        }
+
+        // ---------- Status sinkron yang terlihat pengguna ----------
+        function perbaruiStatusSinkron() {
+            const teks = document.getElementById('statusSinkron');
+            const ikon = document.getElementById('statusSinkronIkon');
+            const kotak = document.getElementById('statusSinkronBox');
+            if (!teks) return;
+            const peta = {
+                idle: { label: 'Siap — semua tersimpan', warna: 'text-blue-200', ikon: 'fa-circle' },
+                pending: { label: 'Menyimpan…', warna: 'text-amber-300', ikon: 'fa-clock' },
+                saving: { label: 'Mengirim ke server…', warna: 'text-amber-300', ikon: 'fa-arrow-up' },
+                saved: { label: 'Tersimpan di server', warna: 'text-green-300', ikon: 'fa-cloud-upload-alt' },
+                offline: { label: 'Belum terkirim — menunggu koneksi', warna: 'text-red-300', ikon: 'fa-exclamation-triangle' },
+                lokal: { label: 'Mode lokal (tanpa server)', warna: 'text-blue-200', ikon: 'fa-hdd' }
+            };
+            const info = peta[statusSinkronServer] || peta.idle;
+            teks.textContent = info.label;
+            teks.className = 'truncate ' + info.warna;
+            if (ikon) ikon.className = 'fas ' + info.ikon + ' text-[9px] ' + info.warna;
+            if (kotak) {
+                kotak.title = stateKotorServer
+                    ? 'Ada perubahan di perangkat ini yang belum terkirim ke server.'
+                    : 'Semua perubahan sudah tersimpan di server dan terbaca dari perangkat lain.';
+            }
+        }
+
+        function setStatusSinkron(status) {
+            if (statusSinkronServer === status) return;
+            statusSinkronServer = status;
+            perbaruiStatusSinkron();
+        }
+
+        function tandaiStateKotor() {
+            stateKotorServer = true;
+            if (localStorage.getItem('stateKotor_v1') !== '1') localStorage.setItem('stateKotor_v1', '1');
+            if (statusSinkronServer !== 'saving') setStatusSinkron('pending');
+        }
+
+        function bersihkanPenandaKotor() {
+            stateKotorServer = false;
+            if (localStorage.getItem('stateKotor_v1') !== null) localStorage.removeItem('stateKotor_v1');
+        }
+
+        // Menarik data server saat pengguna sedang mengetik akan menghapus isi
+        // kotak yang belum tersimpan, jadi tunggu sampai selesai.
+        function adaInputAktif() {
+            const aktif = document.activeElement;
+            if (aktif) {
+                const tag = String(aktif.tagName || '').toUpperCase();
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+                if (aktif.isContentEditable) return true;
+            }
+            // Hanya wadah modal (punya kelas fixed), bukan judul di dalamnya.
+            const lapisan = document.querySelectorAll('[id^="modal"]');
+            for (let i = 0; i < lapisan.length; i++) {
+                const el = lapisan[i];
+                if (el.classList.contains('fixed') && !el.classList.contains('hidden')) return true;
+            }
+            return false;
         }
 
         async function apiServer(route, method = 'GET', body = null) {
@@ -2596,6 +2807,7 @@
         }
 
         function terapkanSnapshotAplikasi(state) {
+            snapshotServerTerakhir = salinState(state);
             sedangMenerapkanStateServer = true;
             try {
                 const hapus = [];
@@ -2648,13 +2860,27 @@
                     const simpan = await apiServer('state/save', 'PUT', { state: lokal, version: 0, force: true });
                     serverStateVersion = simpan.version;
                     localStorage.setItem('serverStateVersion_v1', String(serverStateVersion));
-                    showToast('Data localStorage berhasil dimigrasikan ke MySQL.');
+                    snapshotServerTerakhir = salinState(lokal);
+                    bersihkanPenandaKotor();
+                    setStatusSinkron('saved');
+                    showToast('Data di perangkat ini berhasil dimigrasikan ke server.');
                 }
                 return;
             }
             serverStateVersion = Number(result.version || 0);
             localStorage.setItem('serverStateVersion_v1', String(serverStateVersion));
+            // Perangkat ini punya perubahan yang belum sempat terkirim (mis. offline
+            // lalu halaman ditutup). Gabungkan, jangan timpa.
+            if (localStorage.getItem('stateKotor_v1') === '1' && bolehMenulisServer()) {
+                const gabung = gabungStateTigaArah(null, lokal, result.state);
+                terapkanSnapshotAplikasi(gabung.state);
+                tandaiStateKotor();
+                await sinkronKeServer();
+                return;
+            }
             terapkanSnapshotAplikasi(result.state);
+            bersihkanPenandaKotor();
+            setStatusSinkron('saved');
         }
 
         // Hanya admin/guru yang boleh menulis ke server. Akun siswa bersifat
@@ -2663,9 +2889,46 @@
             return !!penggunaAktif && penggunaAktif.role !== 'siswa';
         }
 
+        // Perangkat lain sudah menulis lebih dulu (HTTP 409). Data lokal TIDAK
+        // dibuang: diambil state server terbaru, digabung tiga arah, lalu disimpan.
+        async function selesaikanKonflikServer(percobaan = 1) {
+            try {
+                const server = await apiServer('state/get');
+                const gabung = gabungStateTigaArah(snapshotServerTerakhir || {}, ambilSnapshotAplikasi(), server.state || {});
+                const simpan = await apiServer('state/save', 'PUT', {
+                    state: gabung.state,
+                    version: Number(server.version || 0),
+                    force: false
+                });
+                serverStateVersion = Number(simpan.version || 0);
+                localStorage.setItem('serverStateVersion_v1', String(serverStateVersion));
+                terapkanSnapshotAplikasi(gabung.state);
+                bersihkanPenandaKotor();
+                percobaanSinkronServer = 0;
+                setStatusSinkron('saved');
+                showToast('Perubahan dari perangkat lain digabungkan — data Anda tetap tersimpan.');
+                return true;
+            } catch (error) {
+                if (error.status === 409 && percobaan < 3) {
+                    await new Promise(selesai => setTimeout(selesai, 400 * percobaan));
+                    return selesaikanKonflikServer(percobaan + 1);
+                }
+                console.warn('Gagal menggabungkan perubahan server:', error.message);
+                tandaiStateKotor();
+                setStatusSinkron('offline');
+                showToast('Perubahan perangkat lain belum bisa digabung. Data Anda aman dan akan dicoba lagi.', 'error');
+                jadwalkanSinkronServer(5000);
+                return false;
+            }
+        }
+
         async function sinkronKeServer(force = false) {
             if (!SERVER_MODE || !serverToken || sedangMenerapkanStateServer) return;
             if (!bolehMenulisServer()) return;
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                setStatusSinkron('offline');
+                return;
+            }
             if (sinkronServerBerjalan) {
                 sinkronServerPending = true;
                 return;
@@ -2674,16 +2937,28 @@
             try {
                 do {
                     sinkronServerPending = false;
-                    const result = await apiServer('state/save', 'PUT', { state: ambilSnapshotAplikasi(), version: serverStateVersion, force });
+                    const snapshot = ambilSnapshotAplikasi();
+                    setStatusSinkron('saving');
+                    const result = await apiServer('state/save', 'PUT', { state: snapshot, version: serverStateVersion, force });
                     serverStateVersion = Number(result.version || serverStateVersion);
                     localStorage.setItem('serverStateVersion_v1', String(serverStateVersion));
+                    snapshotServerTerakhir = salinState(snapshot);
+                    bersihkanPenandaKotor();
+                    percobaanSinkronServer = 0;
+                    setStatusSinkron('saved');
                 } while (sinkronServerPending && !force);
             } catch (error) {
                 if (error.status === 409) {
-                    showToast('Ada perubahan dari perangkat lain. Data terbaru sedang dimuat.', 'error');
-                    await sinkronDariServer();
+                    await selesaikanKonflikServer();
+                } else if (error.status === 401 || error.status === 403) {
+                    console.warn('Sinkron server ditolak:', error.message);
+                    setStatusSinkron('offline');
                 } else {
+                    percobaanSinkronServer += 1;
                     console.warn('Sinkron server gagal:', error.message);
+                    setStatusSinkron('offline');
+                    const jeda = Math.min(30000, 1000 * Math.pow(2, Math.min(percobaanSinkronServer, 5)));
+                    jadwalkanSinkronServer(jeda);
                 }
             } finally {
                 sinkronServerBerjalan = false;
@@ -2693,6 +2968,9 @@
 
         async function tarikPerubahanServerJikaAda() {
             if (!SERVER_MODE || !serverToken || sedangMenerapkanStateServer || sinkronServerBerjalan || sinkronServerPending) return;
+            // Jangan timpa pekerjaan yang belum terkirim: dorong dulu, baru tarik.
+            if (stateKotorServer) { jadwalkanSinkronServer(0); return; }
+            if (adaInputAktif()) return;
             try {
                 const result = await apiServer('state/get');
                 terapkanProfilSiswaServer(result);
@@ -2701,10 +2979,13 @@
                     serverStateVersion = versiServer;
                     localStorage.setItem('serverStateVersion_v1', String(serverStateVersion));
                     terapkanSnapshotAplikasi(result.state);
-                    showToast('Data terbaru dari server sudah dimuat.');
+                    bersihkanPenandaKotor();
+                    showToast('Data terbaru dari perangkat lain sudah dimuat.');
                 }
+                setStatusSinkron('saved');
             } catch (error) {
                 console.warn('Tarik data server gagal:', error.message);
+                setStatusSinkron('offline');
             }
         }
 
@@ -2718,8 +2999,26 @@
         function jadwalkanSinkronServer(delay = 300) {
             if (!SERVER_MODE || !serverToken || sedangMenerapkanStateServer) return;
             if (!bolehMenulisServer()) return;
+            tandaiStateKotor();
             clearTimeout(timerSinkronServer);
             timerSinkronServer = setTimeout(() => sinkronKeServer(), delay);
+        }
+
+        // Halaman ditutup / ponsel dikunci: request biasa dibatalkan browser.
+        // keepalive memastikan perubahan terakhir tetap sampai ke server.
+        function kirimStateSaatPerangkatDisembunyikan() {
+            if (!SERVER_MODE || !serverToken || !bolehMenulisServer() || !stateKotorServer) return;
+            try {
+                const body = JSON.stringify({ state: ambilSnapshotAplikasi(), version: serverStateVersion, force: false });
+                fetch(SERVER_API_URL + '?route=' + encodeURIComponent('state/save'), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + serverToken },
+                    body,
+                    keepalive: true
+                }).catch(() => {});
+            } catch (error) {
+                console.warn('Gagal mengirim data terakhir:', error.message);
+            }
         }
 
         // Menangkap perubahan localStorage agar fungsi lama aplikasi tetap dapat dipakai tanpa ditulis ulang.
@@ -2734,13 +3033,21 @@
                 removeItemAsli.call(this, key);
                 if (this === localStorage && keyStateAplikasi(String(key))) jadwalkanSinkronServer();
             };
-            window.addEventListener('online', () => jadwalkanSinkronServer(0));
-            window.addEventListener('beforeunload', () => { sinkronKeServer(); });
+            window.addEventListener('online', () => {
+                setStatusSinkron('pending');
+                jadwalkanSinkronServer(0);
+            });
+            window.addEventListener('offline', () => setStatusSinkron('offline'));
+            window.addEventListener('beforeunload', kirimStateSaatPerangkatDisembunyikan);
             document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'hidden') sinkronKeServer();
+                if (document.visibilityState === 'hidden') kirimStateSaatPerangkatDisembunyikan();
                 else tarikPerubahanServerJikaAda();
             });
             mulaiTarikServerBerkala();
+            setStatusSinkron(typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'idle');
+        } else {
+            statusSinkronServer = 'lokal';
+            perbaruiStatusSinkron();
         }
 
         function halamanDiizinkan(role, page) {
@@ -3198,6 +3505,9 @@
                     : (role === 'admin' ? 'ADMIN' : 'GURU');
                 badge.className = `inline-block mt-1 px-2 py-0.5 rounded text-[10px] ${role === 'admin' ? 'bg-purple-700' : role === 'guru' ? 'bg-green-700' : 'bg-cyan-700'}`;
             }
+            const kotakStatus = document.getElementById('statusSinkronBox');
+            if (kotakStatus) kotakStatus.classList.toggle('hidden', !role || role === 'siswa');
+            perbaruiStatusSinkron();
             // Siswa tidak perlu (dan tidak boleh) mengganti tahun ajaran sendiri.
             const boxTA = document.getElementById('boxTahunAjaranSidebar');
             if (boxTA) boxTA.style.display = role === 'siswa' ? 'none' : '';
@@ -3228,9 +3538,24 @@
                     return;
                 }
             } catch (error) {
-                serverToken = '';
-                localStorage.removeItem('serverToken_v1');
-                localStorage.removeItem('sesiLogin_v1');
+                const sesiDitolak = error?.status === 401 || error?.status === 403;
+                const sesiTersimpan = JSON.parse(localStorage.getItem('sesiLogin_v1') || 'null');
+                if (sesiDitolak) {
+                    serverToken = '';
+                    localStorage.removeItem('serverToken_v1');
+                    localStorage.removeItem('sesiLogin_v1');
+                } else if (serverToken && sesiTersimpan) {
+                    // Server/ jaringan sedang bermasalah: jangan buang sesi dan
+                    // jangan paksa mode lokal. Tetap pakai data perangkat ini,
+                    // perubahan dikirim otomatis begitu koneksi pulih.
+                    penggunaAktif = { ...sesiTersimpan };
+                    overlay.classList.add('hidden');
+                    terapkanRoleLogin();
+                    setStatusSinkron('offline');
+                    showToast('Server belum bisa dihubungi — memakai data di perangkat ini. Perubahan dikirim otomatis.', 'error');
+                    loadAkunLoginForm();
+                    return;
+                }
             }
             const sesi = JSON.parse(localStorage.getItem('sesiLogin_v1') || 'null');
             let akunValid = false;
@@ -3264,6 +3589,7 @@
             try { if (SERVER_MODE && serverToken) await apiServer('auth/logout', 'POST'); } catch (error) { console.warn(error); }
             // Set null lebih dulu agar pembersihan cache tidak memicu sinkron ke server.
             penggunaAktif = null;
+            bersihkanPenandaKotor();
             localStorage.removeItem('sesiLogin_v1');
             localStorage.removeItem('serverToken_v1');
             serverToken = '';

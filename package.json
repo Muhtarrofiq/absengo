@@ -13,6 +13,7 @@
     "print:preview": "node tools/print-preview.mjs",
     "test:keterangan": "node tools/keterangan-check.mjs",
     "test:batas": "node tools/batas-jam-check.mjs",
-    "demo:batas": "node tools/demo-batas-jam.mjs"
+    "demo:batas": "node tools/demo-batas-jam.mjs",
+    "test:sinkron": "node tools/sinkron-check.mjs"
   }
 }
