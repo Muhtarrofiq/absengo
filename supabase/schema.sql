@@ -15,6 +15,23 @@ create table if not exists public.app_state (
   updated_at timestamptz not null default now()
 );
 
+-- ------------------------------------------------------------
+--  Riwayat snapshot (jaring pengaman bila data tertimpa)
+--  Setiap penyimpanan menyalin versi SEBELUMNYA ke tabel ini,
+--  sehingga data lama selalu bisa dipulihkan dari menu Pengaturan.
+--  Yang disimpan hanya 30 versi terakhir (dipangkas otomatis).
+-- ------------------------------------------------------------
+create table if not exists public.app_state_history (
+  id          bigserial primary key,
+  version     bigint not null,
+  state       jsonb not null,
+  keterangan  text,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists app_state_history_created_idx
+  on public.app_state_history (created_at desc);
+
 -- Tabel akun login (admin / guru / siswa)
 create table if not exists public.auth_users (
   id            serial primary key,
@@ -78,9 +95,10 @@ security definer
 as $$
 declare
   cur_version bigint;
+  cur_state   jsonb;
   new_version bigint;
 begin
-  select version into cur_version from public.app_state where id = 1;
+  select version, state into cur_version, cur_state from public.app_state where id = 1;
   if cur_version is null then
     cur_version := 0;
   end if;
@@ -91,6 +109,15 @@ begin
 
   new_version := cur_version + 1;
 
+  -- Salin versi yang AKAN diganti ke riwayat sebelum ditimpa.
+  if cur_state is not null then
+    insert into public.app_state_history (version, state, keterangan)
+    values (cur_version, cur_state, 'sebelum simpan v' || new_version);
+
+    delete from public.app_state_history
+     where id not in (select id from public.app_state_history order by id desc limit 30);
+  end if;
+
   insert into public.app_state (id, version, state, updated_at)
   values (1, new_version, p_state, now())
   on conflict (id) do update
@@ -99,6 +126,90 @@ begin
         updated_at = now();
 
   return jsonb_build_object('ok', true, 'version', new_version);
+end $$;
+
+-- ------------------------------------------------------------
+--  Daftar riwayat untuk halaman Pengaturan (tanpa mengirim isi
+--  snapshot yang besar: hanya waktu, versi, ukuran, dan jumlah data).
+-- ------------------------------------------------------------
+create or replace function public.app_list_history(p_limit integer default 30)
+returns table (
+  id               bigint,
+  version          bigint,
+  created_at       timestamptz,
+  ukuran           bigint,
+  jumlah_siswa     bigint,
+  jumlah_guru      bigint,
+  jumlah_kehadiran bigint,
+  keterangan       text
+)
+language sql
+stable
+security definer
+as $$
+  select h.id,
+         h.version,
+         h.created_at,
+         octet_length(h.state::text)::bigint as ukuran,
+         coalesce((select sum(jsonb_array_length(e.value::jsonb))
+                     from jsonb_each_text(h.state) e
+                    where e.key like '%dataSiswa_v1'
+                      and jsonb_typeof(e.value::jsonb) = 'array'), 0)::bigint as jumlah_siswa,
+         coalesce((select sum(jsonb_array_length(e.value::jsonb))
+                     from jsonb_each_text(h.state) e
+                    where e.key like '%dataGuru_v2'
+                      and jsonb_typeof(e.value::jsonb) = 'array'), 0)::bigint as jumlah_guru,
+         coalesce((select sum(jsonb_array_length(e.value::jsonb))
+                     from jsonb_each_text(h.state) e
+                    where e.key like '%dataKehadiran'
+                      and jsonb_typeof(e.value::jsonb) = 'array'), 0)::bigint as jumlah_kehadiran,
+         h.keterangan
+    from public.app_state_history h
+   order by h.id desc
+   limit greatest(1, least(coalesce(p_limit, 30), 100));
+$$;
+
+-- ------------------------------------------------------------
+--  Pulihkan snapshot lama sebagai VERSI BARU.
+--  Versi yang sedang aktif ikut diarsipkan lebih dulu, jadi
+--  pemulihan selalu bisa dibatalkan (tidak ada data yang hilang).
+-- ------------------------------------------------------------
+create or replace function public.app_restore_state(p_history_id bigint)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  h           record;
+  cur_version bigint;
+  cur_state   jsonb;
+  new_version bigint;
+begin
+  select * into h from public.app_state_history where id = p_history_id;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'not_found');
+  end if;
+
+  select version, state into cur_version, cur_state from public.app_state where id = 1;
+  cur_version := coalesce(cur_version, 0);
+  new_version := cur_version + 1;
+
+  if cur_state is not null then
+    insert into public.app_state_history (version, state, keterangan)
+    values (cur_version, cur_state, 'sebelum pulihkan ke v' || h.version);
+  end if;
+
+  insert into public.app_state (id, version, state, updated_at)
+  values (1, new_version, h.state, now())
+  on conflict (id) do update
+    set version = excluded.version,
+        state   = excluded.state,
+        updated_at = now();
+
+  delete from public.app_state_history
+   where id not in (select id from public.app_state_history order by id desc limit 30);
+
+  return jsonb_build_object('ok', true, 'version', new_version, 'dari_version', h.version);
 end $$;
 
 -- Seed akun default (dihapus/diubah lewat menu Pengaturan > Akun Login)

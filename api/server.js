@@ -5,9 +5,9 @@
 //  auth/logout, auth/update-accounts, auth/siswa-accounts.
 //
 //  Backend: Supabase Postgres (via REST, tanpa dependency npm).
-//  Env vars yang harus diset di Vercel:
-//    SUPABASE_URL             = https://xxxx.supabase.co
-//    SUPABASE_SERVICE_ROLE_KEY = service_role key (jangan bocor)
+//  Env vars WAJIB di Vercel (tanpa fallback di kode):
+//    SUPABASE_URL              = https://xxxx.supabase.co
+//    SUPABASE_SERVICE_ROLE_KEY = service_role / secret key (jangan pernah commit)
 //
 //  Kontrol akses SISWA:
 //    Akun ber-role 'siswa' terikat pada satu kelas (dan satu siswa).
@@ -18,11 +18,14 @@
 
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://erwqapyghnbxznkijnnm.supabase.co';
-// Kredensial: diambil dari env Vercel; jika belum di-set, pakai fallback agar
-// langsung jalan tanpa seting. Berjalan di sisi server (tidak dikirim ke browser),
-// namun simpan repo ini privat agar secret tidak bocor. Cara terbersih tetap env var.
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'sb_secret_E30e9diFRat08kkghXalYQ_avhIWbOr';
+// Kredensial HANYA dari environment variable (Vercel > Settings > Environment
+// Variables). Tidak ada fallback yang ditanam di kode: repo ini publik, sehingga
+// secret apa pun di sini otomatis bocor. Bila env belum di-set, semua route
+// menjawab 500 dengan pesan yang jelas (lihat handler di bawah).
+const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+const SUPABASE_KEY = String(
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || ''
+).trim();
 
 const SESSION_DAYS = 30;
 
@@ -327,6 +330,61 @@ async function saveState(req, body) {
   return { ok: true, version: Number(result.version) };
 }
 
+// ---- Riwayat snapshot & pemulihan (admin) ----
+function normalisasiRiwayat(row) {
+  const angka = (nilai) => {
+    const n = Number(nilai);
+    return Number.isFinite(n) ? n : 0;
+  };
+  return {
+    id: String(row.id),
+    version: angka(row.version),
+    createdAt: row.created_at || null,
+    ukuran: angka(row.ukuran),
+    jumlahSiswa: angka(row.jumlah_siswa),
+    jumlahGuru: angka(row.jumlah_guru),
+    jumlahKehadiran: angka(row.jumlah_kehadiran),
+    keterangan: row.keterangan || '',
+  };
+}
+
+async function stateHistory(req) {
+  await requireRole(req, 'admin');
+  let rows;
+  try {
+    rows = await SB.rpc('app_list_history', { p_limit: 30 });
+  } catch (error) {
+    throw withSchemaHint(error);
+  }
+  const daftar = Array.isArray(rows) ? rows : [];
+  return { ok: true, riwayat: daftar.map(normalisasiRiwayat) };
+}
+
+async function restoreState(req, body) {
+  await requireRole(req, 'admin');
+  const historyId = Number(body?.historyId);
+  if (!Number.isFinite(historyId) || historyId <= 0) {
+    throw new ApiError(400, 'historyId wajib diisi.');
+  }
+  let result;
+  try {
+    result = await SB.rpc('app_restore_state', { p_history_id: historyId });
+  } catch (error) {
+    throw withSchemaHint(error);
+  }
+  if (!result || result.ok !== true) {
+    if (result && result.code === 'not_found') {
+      throw new ApiError(404, 'Versi riwayat tidak ditemukan (mungkin sudah terpangkas).');
+    }
+    throw new ApiError(500, 'Gagal memulihkan data.');
+  }
+  return {
+    ok: true,
+    version: Number(result.version) || 0,
+    dariVersion: Number(result.dari_version) || 0,
+  };
+}
+
 async function login(body) {
   const username = String(body?.username || '').trim();
   const password = String(body?.password || '');
@@ -585,6 +643,12 @@ async function dispatch(route, req) {
     case 'state/save':
       if (method !== 'PUT' && method !== 'POST') throw new ApiError(405, 'Method tidak didukung.');
       return saveState(req, body);
+    case 'state/history':
+      if (method !== 'GET') throw new ApiError(405, 'Method tidak didukung.');
+      return stateHistory(req);
+    case 'state/restore':
+      if (method !== 'POST' && method !== 'PUT') throw new ApiError(405, 'Method tidak didukung.');
+      return restoreState(req, body);
     case 'auth/login':
       if (method !== 'POST') throw new ApiError(405, 'Method tidak didukung.');
       return login(body);
