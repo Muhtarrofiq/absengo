@@ -155,5 +155,68 @@ console.log('\n-- C. Migrasi lalu schema.sql lengkap --');
   await db.close();
 }
 
+// ---------- Skenario D: riwayat snapshot & pemulihan ----------
+console.log('\n-- D. Riwayat snapshot & pemulihan --');
+{
+  const db = new PGlite();
+  await db.exec(sql('supabase/schema.sql'));
+
+  const tabel = await db.query(`select table_name from information_schema.tables where table_schema='public'`);
+  check('tabel app_state_history dibuat', tabel.rows.some(r => r.table_name === 'app_state_history'));
+
+  const stateA = `{"pengaturan":"{\\"namaSekolah\\":\\"Sekolah A\\"}","ta_2025_2026__dataSiswa_v1":"[{\\"id\\":\\"s1\\"},{\\"id\\":\\"s2\\"}]","ta_2025_2026__dataGuru_v2":"[{\\"id\\":\\"g1\\"}]","ta_2025_2026__dataKehadiran":"[{\\"id\\":\\"k1\\"},{\\"id\\":\\"k2\\"},{\\"id\\":\\"k3\\"}]"}`;
+  const stateB = `{"pengaturan":"{\\"namaSekolah\\":\\"Sekolah B\\"}","ta_2025_2026__dataSiswa_v1":"[{\\"id\\":\\"s1\\"}]","ta_2025_2026__dataGuru_v2":"[]","ta_2025_2026__dataKehadiran":"[]"}`;
+
+  await db.query(`select public.app_save_state(0, '${stateA}'::jsonb, true)`);
+  let kosong = await db.query(`select count(*)::int as n from public.app_state_history`);
+  check('simpan pertama belum membuat riwayat', kosong.rows[0].n === 0, String(kosong.rows[0].n));
+
+  await db.query(`select public.app_save_state(1, '${stateB}'::jsonb, true)`);
+  const isi = await db.query(`select version, keras from (
+      select version, (state->>'pengaturan') like '%Sekolah A%' as keras from public.app_state_history
+    ) t`);
+  check('simpan kedua mengarsipkan versi sebelumnya', isi.rows.length === 1 && Number(isi.rows[0].version) === 1);
+  check('isi arsip = state sebelum ditimpa', isi.rows[0].keras === true);
+
+  const daftar = await db.query(`select * from public.app_list_history(30)`);
+  check('app_list_history mengembalikan 1 baris', daftar.rows.length === 1, String(daftar.rows.length));
+  const baris = daftar.rows[0];
+  check('hitung siswa dari nilai teks JSON', Number(baris.jumlah_siswa) === 2, String(baris.jumlah_siswa));
+  check('hitung guru dari nilai teks JSON', Number(baris.jumlah_guru) === 1, String(baris.jumlah_guru));
+  check('hitung kehadiran dari nilai teks JSON', Number(baris.jumlah_kehadiran) === 3, String(baris.jumlah_kehadiran));
+  check('ukuran snapshot dilaporkan', Number(baris.ukuran) > 50, String(baris.ukuran));
+  check('keterangan terisi', String(baris.keterangan || '').includes('sebelum simpan'));
+
+  const pulih = await db.query(`select public.app_restore_state(${Number(baris.id)}) as hasil`);
+  check('app_restore_state berhasil', pulih.rows[0].hasil?.ok === true, JSON.stringify(pulih.rows[0].hasil));
+  check('versi baru setelah pulih', Number(pulih.rows[0].hasil.version) === 3, JSON.stringify(pulih.rows[0].hasil));
+  check('dari_version = 1', Number(pulih.rows[0].hasil.dari_version) === 1);
+
+  const sesudah = await db.query(`select version, state from public.app_state where id = 1`);
+  check('state kembali ke Sekolah A', String(sesudah.rows[0].state.pengaturan).includes('Sekolah A'), String(sesudah.rows[0].state.pengaturan));
+  check('versi state menjadi 3', Number(sesudah.rows[0].version) === 3, String(sesudah.rows[0].version));
+
+  const arsip = await db.query(`select count(*)::int as n from public.app_state_history`);
+  check('versi sebelum pulih ikut diarsipkan', arsip.rows[0].n === 2, String(arsip.rows[0].n));
+
+  const tidakAda = await db.query(`select public.app_restore_state(999999) as hasil`);
+  check('id tak dikenal => not_found', tidakAda.rows[0].hasil?.ok === false && tidakAda.rows[0].hasil.code === 'not_found');
+
+  // Pangkas otomatis: 35 penyimpanan -> maksimal 30 arsip.
+  let versi = 3;
+  for (let i = 0; i < 35; i++) {
+    const state = JSON.stringify({ pengaturan: JSON.stringify({ namaSekolah: 'Mundur ' + i }) });
+    await db.query('select public.app_save_state($1, $2::jsonb, true)', [versi, state]);
+    versi += 1;
+  }
+  const pangkas = await db.query(`select count(*)::int as n, min(version)::bigint as terlama from public.app_state_history`);
+  check('riwayat dipangkas maksimal 30', pangkas.rows[0].n === 30, String(pangkas.rows[0].n));
+  check('yang dipangkas versi paling lama', Number(pangkas.rows[0].terlama) > 1, String(pangkas.rows[0].terlama));
+
+  const r = await coba(db, 'schema ulang', () => db.exec(sql('supabase/schema.sql')));
+  check('schema.sql tetap idempotent dengan tabel riwayat', r.ok);
+  await db.close();
+}
+
 console.log(`\n===== SKEMA: ${pass} lolos, ${fail} gagal =====`);
 process.exit(fail ? 1 : 0);

@@ -13,6 +13,32 @@ import http from 'node:http';
 
 // Data in-memory
 const appState = []; // {id:1, version, state}
+const appStateHistory = []; // riwayat: {id, version, state, keterangan, created_at}
+const RIWAYAT_MAKS = 30;
+let riwayatSeq = 0;
+// Nilai state disimpan sebagai TEKS JSON (persis seperti localStorage),
+// jadi harus di-parse dulu sebelum dihitung panjangnya.
+function hitungPanjangArray(state, akhiran) {
+  if (!state || typeof state !== 'object') return 0;
+  return Object.keys(state).filter(k => k.endsWith(akhiran)).reduce((total, k) => {
+    let nilai = state[k];
+    if (typeof nilai === 'string') {
+      try { nilai = JSON.parse(nilai); } catch { return total; }
+    }
+    return total + (Array.isArray(nilai) ? nilai.length : 0);
+  }, 0);
+}
+function catatRiwayat(version, state, keterangan) {
+  if (!state) return;
+  appStateHistory.unshift({
+    id: ++riwayatSeq,
+    version: Number(version) || 0,
+    state: JSON.parse(JSON.stringify(state)),
+    keterangan: keterangan || '',
+    created_at: new Date().toISOString(),
+  });
+  while (appStateHistory.length > RIWAYAT_MAKS) appStateHistory.pop();
+}
 const authUsers = [
   { id: 1, username: 'admin', password_hash: 'scrypt$iZ2rfwhTNVnAcXFfJWICOQ==$Z1nACicQwLt6mjRR9+VXUteVCqZWRER38iar9htFowTdvkkMZO8ZeFZgfRIOF+QtP+iduG+cipy5GFVtygT2Uw==', role: 'admin', nama: 'Admin', kelas: null, siswa_id: null, akses: 'sendiri' },
   { id: 2, username: 'guru',  password_hash: 'scrypt$nfTVeZdtyNb1OSmnJvv56w==$acAv8PVd9UOdinw3mmgTlZCuEKq1ah7q06cT2I+4q2UOVJ+ptB0pDdtu4vQJqHyM2SZDejqUz4xAKMQiTLgjLg==', role: 'guru', nama: 'Guru', kelas: null, siswa_id: null, akses: 'sendiri' },
@@ -51,10 +77,42 @@ const server = http.createServer(async (req, res) => {
         return send(200, { ok: false, code: 'conflict', version: curVersion });
       }
       const newVersion = curVersion + 1;
+      if (cur) catatRiwayat(curVersion, cur.state, 'sebelum simpan v' + newVersion);
       if (cur) cur.version = newVersion, cur.state = p_state, cur.updated_at = new Date().toISOString();
       else appState.push({ id: 1, version: newVersion, state: p_state, updated_at: new Date().toISOString() });
       return send(200, { ok: true, version: newVersion });
     }
+    // RPC app_list_history
+    if (path === '/rest/v1/rpc/app_list_history') {
+      const limit = Math.max(1, Math.min(Number(body?.p_limit) || 30, 100));
+      const rows = appStateHistory.slice(0, limit).map(h => ({
+        id: h.id,
+        version: h.version,
+        created_at: h.created_at,
+        ukuran: Buffer.byteLength(JSON.stringify(h.state), 'utf8'),
+        jumlah_siswa: hitungPanjangArray(h.state, 'dataSiswa_v1'),
+        jumlah_guru: hitungPanjangArray(h.state, 'dataGuru_v2'),
+        jumlah_kehadiran: hitungPanjangArray(h.state, 'dataKehadiran'),
+        keterangan: h.keterangan || '',
+      }));
+      return send(200, rows);
+    }
+
+    // RPC app_restore_state
+    if (path === '/rest/v1/rpc/app_restore_state') {
+      const historyId = Number(body?.p_history_id);
+      const h = appStateHistory.find(r => r.id === historyId);
+      if (!h) return send(200, { ok: false, code: 'not_found' });
+      let cur = appState.find(r => r.id === 1);
+      const curVersion = cur ? cur.version : 0;
+      const newVersion = curVersion + 1;
+      if (cur) catatRiwayat(curVersion, cur.state, 'sebelum pulihkan ke v' + h.version);
+      const stateBaru = JSON.parse(JSON.stringify(h.state));
+      if (cur) cur.version = newVersion, cur.state = stateBaru, cur.updated_at = new Date().toISOString();
+      else appState.push({ id: 1, version: newVersion, state: stateBaru, updated_at: new Date().toISOString() });
+      return send(200, { ok: true, version: newVersion, dari_version: h.version });
+    }
+
     // SELECT app_state
     if (path === '/rest/v1/app_state' && req.method === 'GET') {
       const row = appState.find(r => r.id === 1);

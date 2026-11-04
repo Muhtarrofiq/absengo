@@ -60,9 +60,10 @@ Supabase versi baru memakai key `sb_secret_...` / `sb_publishable_...`.
 
 ## Langkah 2 — Deploy ke Vercel
 
-> **ℹ️ Versi ini sudah terkoneksi langsung ke Supabase** — kredensial (URL + `sb_secret`)
-> sudah di-embed sebagai *fallback* di `api/server.js`, jadi **tidak perlu set env var di Vercel**.
-> Cukup deploy folder ini, langsung jalan. (Baca catatan keamanan di bawah.)
+> **⚠️ Wajib set Environment Variables di Vercel** sebelum aplikasi bisa dipakai:
+> `SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY`. Kredensial **tidak lagi ditanam di kode**
+> (repo ini publik). Tanpa env tersebut, semua route `/api/server` menjawab 500 dengan pesan
+> "Backend belum dikonfigurasi".
 
 **Cara A — Drag & drop (paling cepat):**
 1. Buka [vercel.com/new](https://vercel.com/new).
@@ -80,18 +81,22 @@ npm i -g vercel
 cd payroll-guru
 vercel --prod
 ```
-Jawab prompt dengan Enter (default). Tidak ada konfigurasi build manual & tidak perlu set env
-(kredensial sudah menjadi fallback di `api/server.js`).
+Jawab prompt dengan Enter (default), lalu isi env `SUPABASE_URL` &
+`SUPABASE_SERVICE_ROLE_KEY` di dashboard Vercel → **Settings → Environment Variables**.
 
 ---
 
-## Catatan keamanan (fallback key di kode)
-Kredensial Supabase (`sb_secret`) saat ini tertanam di `api/server.js` agar tidak perlu set env.
-Karena file ini berjalan **di sisi server** (Vercel), key tidak pernah dikirim ke browser pengguna.
-Namun, key ikut tersimpan di kode — jadi:
-- **Simpan repo ini PRIVAT** (jangan public).
-- Untuk keamanan lebih baik, hapus baris fallback dan gunakan env var Vercel
-  (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) seperti versi awal README.
+## Catatan keamanan (kunci Supabase)
+
+- `api/server.js` **tidak lagi memuat kredensial apa pun**. Hanya membaca
+  `process.env.SUPABASE_URL` & `process.env.SUPABASE_SERVICE_ROLE_KEY`
+  (atau `SUPABASE_KEY`). Bila kosong, semua route menjawab 500 dengan pesan jelas.
+- Repo ini **publik**. Karena versi lama sempat menanam `sb_secret` di kode, kunci tersebut
+  harus dianggap sudah bocor:
+  1. Supabase → **Settings → API Keys** → buat secret key baru.
+  2. Tempel nilai baru ke Vercel → Settings → Environment Variables → `SUPABASE_SERVICE_ROLE_KEY`.
+  3. **Hapus/revoke** kunci lama di Supabase.
+  4. Redeploy (Vercel → Deployments → Redeploy) agar env baru terbaca.
 
 ---
 
@@ -125,6 +130,20 @@ Namun, key ikut tersimpan di kode — jadi:
   `Cache-Control: max-age=0, must-revalidate` (lihat `vercel.json`), jadi browser tidak
   memakai kode lama yang masih menimpa data dengan cara lama.
 - Data dipisah per **Tahun Ajaran** (sama seperti di mode lokal).
+
+## Riwayat data & pemulihan
+
+Setiap penyimpanan menyalin versi **sebelumnya** ke tabel `app_state_history`
+(30 versi terakhir, lebih lama dipangkas otomatis). Di **Pengaturan → Riwayat Data & Pulihkan**
+admin bisa melihat daftar versi (waktu, versi, jumlah siswa/guru/kehadiran, ukuran) lalu
+menekan **Pulihkan**.
+
+- Pemulihan membuat **versi baru** (bukan menimpa riwayat), dan versi yang sedang aktif
+  diarsipkan lebih dulu — jadi pemulihan selalu bisa dibatalkan.
+- Terbatas untuk **admin** (guru & siswa ditolak 403).
+- Setelah dipulihkan, semua perangkat menerima data baru pada tarik berkala berikutnya.
+- Endpoint: `GET /api/server?route=state/history`, `POST /api/server?route=state/restore`
+  dengan body `{ "historyId": 12 }`.
 
 ## Akun & role
 - **Admin**: akses penuh (kelola data, gaji, akun login).
@@ -204,7 +223,15 @@ Uji skema SQL terhadap Postgres sungguhan (PGlite — WASM, tanpa server DB):
 
 ```bash
 npm install --no-save @electric-sql/pglite
-npm run test:schema      # instalasi baru, upgrade DB lama, idempotensi, constraint
+npm run test:schema      # instalasi baru, upgrade DB lama, idempotensi, constraint,
+                         # riwayat snapshot & pemulihan (PGlite)
+```
+
+Uji riwayat data & pemulihan (server + UI):
+
+```bash
+npm install --no-save jsdom
+npm run test:riwayat     # 43 cek: riwayat, pulihkan, batalkan pulih, hak akses, pangkas 30
 ```
 
 Uji sinkronisasi lintas perangkat (dua "perangkat" jsdom sekaligus):
