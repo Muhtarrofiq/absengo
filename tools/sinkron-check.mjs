@@ -301,6 +301,71 @@ E.window.eval('logoutAplikasi()');
 await sleep(300);
 check('penanda kotor dibersihkan saat logout', !E.window.localStorage.getItem('stateKotor_v1'));
 
+// ================= 13. Layar Input Kehadiran: centang tidak hilang =================
+console.log('\n-- 13. Centang di layar Input Kehadiran tidak hilang saat perangkat lain menyimpan --');
+const guruJadwal = `{ id: 'g1', nama: 'Guru Satu', kode: 'A', nip: '1',
+  jadwalHarian: { 1: 10, 2: 10, 3: 10, 4: 10, 5: 10, 6: 10 },
+  jamKeHarian: { 1: [1,2,3,4,5,6,7,8,9,10], 2: [1,2,3,4,5,6,7,8,9,10], 3: [1,2,3,4,5,6,7,8,9,10], 4: [1,2,3,4,5,6,7,8,9,10], 5: [1,2,3,4,5,6,7,8,9,10] } }`;
+A.window.eval(`dataGuru = [${guruJadwal}]; taSet('dataGuru_v2', dataGuru);`);
+await sleep(1000);
+sekarang = await call('state/get', 'GET', null, adminToken);
+check('jadwal guru tersimpan di server', JSON.parse(sekarang.data.state['ta_2025_2026__dataGuru_v2'])[0].jadwalHarian?.['1'] === 10);
+
+await B.window.eval('tarikPerubahanServerJikaAda()');
+await sleep(500);
+check('perangkat B memakai jadwal yang sama', B.window.eval('dataGuru[0].jadwalHarian?.[1]') === 10);
+
+A.window.eval("openModalKehadiranMassal(); document.getElementById('kehadiranTanggal').value = '2026-10-05'; tanggalInputKehadiranBerubah(); renderInputKehadiranMassal();");
+const kotakA = () => A.window.document.querySelectorAll('#tbodyInputKehadiranMassal input[type=checkbox]');
+check('kotak jam muncul di modal input kehadiran', kotakA().length === 10, String(kotakA().length));
+
+// Pengguna mulai mencentang (belum disimpan) dan fokus ada di kotak centang.
+kotakA()[0].focus();
+kotakA()[0].checked = true;
+kotakA()[1].checked = true;
+kotakA()[2].checked = true;
+A.window.eval("updateTotalKehadiranMassal('g1')");
+check('fokus pada kotak centang terdeteksi', A.window.eval('adaInputAktif()') === true);
+
+// Perangkat B menyimpan data lain -> versi server naik.
+B.window.eval("dataSiswa.push({ id: 'sB2', nisn: 'B02', nama: 'Siswa Dari B', kelas: 'VII A' }); taSet('dataSiswa_v1', dataSiswa);");
+await sleep(1000);
+sekarang = await call('state/get', 'GET', null, adminToken);
+check('data perangkat B tersimpan lebih dulu', JSON.parse(sekarang.data.state['ta_2025_2026__dataSiswa_v1']).some(s => s.id === 'sB2'));
+
+A.window.eval('tarikPerubahanServerJikaAda()');
+await sleep(200);
+check('modal input kehadiran tetap terbuka', !A.window.document.getElementById('modalKehadiran').classList.contains('hidden'));
+check('centang pengguna masih utuh (3 kotak)', A.window.document.querySelectorAll('#tbodyInputKehadiranMassal input[type=checkbox]:checked').length === 3, String(A.window.document.querySelectorAll('#tbodyInputKehadiranMassal input[type=checkbox]:checked').length));
+check('kotak jam tidak hilang saat tarik ditunda', kotakA().length === 10, String(kotakA().length));
+
+// Fokus pindah (mis. pengguna menyentuh layar lain) tapi modal masih terbuka.
+A.window.document.activeElement.blur();
+check('modal terbuka tetap menahan tarik', A.window.eval('adaInputAktif()') === true);
+
+// Simpan: server sudah berubah -> 409 -> gabung.
+A.window.eval('simpanKehadiranMassal()');
+await sleep(1600);
+sekarang = await call('state/get', 'GET', null, adminToken);
+const kehadiranServer = JSON.parse(sekarang.data.state['ta_2025_2026__dataKehadiran'] || '[]');
+const recordG1 = kehadiranServer.find(k => k.guruId === 'g1' && k.tanggal === '2026-10-05');
+check('kehadiran hasil centang tersimpan di server', !!recordG1, JSON.stringify(kehadiranServer.map(k => k.tanggal + ':' + (k.jumlah ?? 0))));
+check('jumlah JP sesuai centang', recordG1?.jumlah === 3, String(recordG1?.jumlah));
+check('jam ke yang dicentang ikut tersimpan', JSON.stringify(recordG1?.jamKeHadir) === '[1,2,3]', JSON.stringify(recordG1?.jamKeHadir));
+const siswaSetelahSimpan = JSON.parse(sekarang.data.state['ta_2025_2026__dataSiswa_v1']);
+check('data perangkat B tidak terhapus oleh simpan kehadiran', siswaSetelahSimpan.some(s => s.id === 'sB2'), JSON.stringify(siswaSetelahSimpan.map(s => s.id)));
+check('perangkat A melihat data gabungan', A.window.eval("dataSiswa.map(s => s.id)").includes('sB2'));
+
+// ================= 14. Tarik berjalan lagi setelah modal ditutup =================
+console.log('\n-- 14. Pengguna selesai mengetik, tarik data kembali normal --');
+A.window.eval("document.getElementById('modalKehadiran').classList.add('hidden');");
+check('tanpa modal/input, tarik diizinkan', A.window.eval('adaInputAktif()') === false);
+B.window.eval("dataSiswa.push({ id: 'sB3', nisn: 'B03', nama: 'Siswa Ketiga', kelas: 'VII A' }); taSet('dataSiswa_v1', dataSiswa);");
+await sleep(1000);
+await A.window.eval('tarikPerubahanServerJikaAda()');
+await sleep(400);
+check('perangkat A menerima data baru setelah modal ditutup', A.window.eval("dataSiswa.map(s => s.id)").includes('sB3'), A.window.eval("dataSiswa.map(s => s.id).join(',')"));
+
 for (const p of [A, B, C, D, E]) p.dom.window.close();
 mock.proc.kill();
 api.proc.kill();

@@ -121,6 +121,9 @@ Namun, key ikut tersimpan di kode — jadi:
   dibuang bila server benar-benar menolak token (401/403).
 - Indikator status di sidebar: **Menyimpan… → Tersimpan di server** atau
   **Belum terkirim — menunggu koneksi**.
+- Perangkat selalu memuat versi terbaru: `/` dan `/index.html` dikirim dengan
+  `Cache-Control: max-age=0, must-revalidate` (lihat `vercel.json`), jadi browser tidak
+  memakai kode lama yang masih menimpa data dengan cara lama.
 - Data dipisah per **Tahun Ajaran** (sama seperti di mode lokal).
 
 ## Akun & role
@@ -208,7 +211,8 @@ Uji sinkronisasi lintas perangkat (dua "perangkat" jsdom sekaligus):
 
 ```bash
 npm install --no-save jsdom
-npm run test:sinkron     # 47 cek: konflik 409, merge per id, offline, keepalive, sesi
+npm run test:sinkron     # 63 cek: konflik 409, merge per id, layar input kehadiran,
+                         # offline, keepalive, sesi, kunci yang belum dikenal
 ```
 
 Uji batas jam per tanggal (jsdom):
